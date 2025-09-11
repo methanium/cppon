@@ -5144,7 +5144,7 @@ struct printer_state {
 	void swap(printer& Printer) noexcept;
 };
 
-static auto& get_printer_state() {
+inline static auto& get_printer_state() {
 	static thread_local printer_state State;
 	return State;
 	}
@@ -5564,7 +5564,7 @@ struct printer
 		}
 };
 
-void printer_state::swap(printer& Printer) noexcept {
+inline void printer_state::swap(printer& Printer) noexcept {
 	std::swap(Printer.Out, Out);
 	std::swap(Printer.Compacted, Compacted);
 	std::swap(Printer.Level, Level);

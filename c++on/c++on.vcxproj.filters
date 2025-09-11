@@ -1,0 +1,302 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="c++on-repo">
+      <UniqueIdentifier>{928f065e-08eb-4bbf-a532-771ef50aec79}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\benchmarks">
+      <UniqueIdentifier>{5a3dd370-5177-449a-bdbd-987f841b397e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\docs">
+      <UniqueIdentifier>{bdaab8f6-9131-4654-8f7e-fc6a7984b68a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\examples">
+      <UniqueIdentifier>{7f5dec87-3dcc-4371-8499-9228e9facaf1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\include">
+      <UniqueIdentifier>{3d95c13a-bfe3-440e-aea0-3fae30d1c490}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\tests">
+      <UniqueIdentifier>{b657ec8d-978a-4a54-801e-9654c35f5c3e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\include\cppon">
+      <UniqueIdentifier>{3afce678-8c67-4624-ba5e-f191f87f3fa7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\include\utils">
+      <UniqueIdentifier>{2aa407a8-1b2c-47ff-a973-5f8bd95af3ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\docs\internals">
+      <UniqueIdentifier>{74107329-519e-45bb-bf8b-06af65414a51}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\include\platform">
+      <UniqueIdentifier>{6b0f9964-8641-4df0-93ca-5ec1ca60e5c0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\include\simd">
+      <UniqueIdentifier>{3498d380-c684-48a4-b30d-09951762e4df}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\single_include">
+      <UniqueIdentifier>{71045bd7-ee1b-4a7d-ae06-a3a0bf0acf58}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\single_include\cppon">
+      <UniqueIdentifier>{683a0c01-ffbc-4277-86ce-02abe90a5c99}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\scripts">
+      <UniqueIdentifier>{74251ded-92eb-49ec-b9a6-a9a6b7aff41c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\templates">
+      <UniqueIdentifier>{c4ebea6b-a4b9-4874-9d2d-648569573b60}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\templates\headers">
+      <UniqueIdentifier>{a2f42249-6929-43ab-bd57-6ed9ae5dee46}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\templates\headers\cppon">
+      <UniqueIdentifier>{5ab5564c-c0e9-46b6-ae18-f876f2939d75}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\templates\headers\simd">
+      <UniqueIdentifier>{76f4026d-41e9-4ad7-8b74-bafa560d46a4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="c++on-repo\templates\headers\platform">
+      <UniqueIdentifier>{9c9ca007-eb0f-4368-9f02-fa8f4c5b699a}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="c++on.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\benchmarks\bench_common.cpp">
+      <Filter>c++on-repo\benchmarks</Filter>
+    </ClCompile>
+    <ClCompile Include="..\benchmarks\bench_file_loading.cpp">
+      <Filter>c++on-repo\benchmarks</Filter>
+    </ClCompile>
+    <ClCompile Include="..\benchmarks\bench_parsing.cpp">
+      <Filter>c++on-repo\benchmarks</Filter>
+    </ClCompile>
+    <ClCompile Include="..\benchmarks\bench_serialization.cpp">
+      <Filter>c++on-repo\benchmarks</Filter>
+    </ClCompile>
+    <ClCompile Include="..\examples\basic_usage.cpp">
+      <Filter>c++on-repo\examples</Filter>
+    </ClCompile>
+    <ClCompile Include="..\examples\binary_blobs.cpp">
+      <Filter>c++on-repo\examples</Filter>
+    </ClCompile>
+    <ClCompile Include="..\examples\features_snippets.cpp">
+      <Filter>c++on-repo\examples</Filter>
+    </ClCompile>
+    <ClCompile Include="..\examples\formatting_options.cpp">
+      <Filter>c++on-repo\examples</Filter>
+    </ClCompile>
+    <ClCompile Include="..\examples\literals_usage.cpp">
+      <Filter>c++on-repo\examples</Filter>
+    </ClCompile>
+    <ClCompile Include="..\examples\paths_example.cpp">
+      <Filter>c++on-repo\examples</Filter>
+    </ClCompile>
+    <ClCompile Include="..\examples\references_example.cpp">
+      <Filter>c++on-repo\examples</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tests\main.cpp">
+      <Filter>c++on-repo\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tests\test_all_google.cpp">
+      <Filter>c++on-repo\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tests\test_all_run.cpp">
+      <Filter>c++on-repo\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tests\test_no_simd_smoke.cpp">
+      <Filter>c++on-repo\tests</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\include\cppon\c++on.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-alternatives.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-exceptions.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-literals.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-parser.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-parser_error.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-printer.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-references.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-scanner.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-types.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-visitors.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\platform\processor_features_info.h">
+      <Filter>c++on-repo\include\platform</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\simd\simd_comparisons.h">
+      <Filter>c++on-repo\include\simd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\utils\string_buffer.h">
+      <Filter>c++on-repo\include\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\single_include\cppon\c++on.h">
+      <Filter>c++on-repo\single_include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tests\pch.h">
+      <Filter>c++on-repo\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tests\run_test.h">
+      <Filter>c++on-repo\tests</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\benchmarks\Catalog.json">
+      <Filter>c++on-repo\benchmarks</Filter>
+    </None>
+    <None Include="..\docs\ABOUT.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\ACKNOWLEDGEMENT.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\API_REFERENCE.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\BASIC_USAGE.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\CHANGELOG.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\CODE_OF_CONDUCT.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\CONFIGURATION.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\CONTACT.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\EXCEPTIONS.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\FAQ.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\GLOSSARY.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\INDEX.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\INTRODUCTION.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\LITERALS.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\PATHS.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\PERFORMANCE.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\ROADMAP.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\SIMD_SUPPORT.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\internals\INDEX.md">
+      <Filter>c++on-repo\docs\internals</Filter>
+    </None>
+    <None Include="..\scripts\generate_uber_header.py">
+      <Filter>c++on-repo\scripts</Filter>
+    </None>
+    <None Include="..\scripts\run.bat">
+      <Filter>c++on-repo\scripts</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-alternatives.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-exceptions.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-literals.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-parser.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-printer.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-references.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-scanner.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-types.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-visitors.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </None>
+    <None Include="..\templates\headers\platform\processor_features_info.tmpl">
+      <Filter>c++on-repo\templates\headers\platform</Filter>
+    </None>
+    <None Include="..\templates\headers\simd\simd_comparisons.tmpl">
+      <Filter>c++on-repo\templates\headers\simd</Filter>
+    </None>
+    <None Include="..\templates\headers\c++on.tmpl">
+      <Filter>c++on-repo\templates\headers</Filter>
+    </None>
+    <None Include="..\templates\fragment.ignore">
+      <Filter>c++on-repo\templates</Filter>
+    </None>
+    <None Include="..\templates\template.json">
+      <Filter>c++on-repo\templates</Filter>
+    </None>
+    <None Include="..\CONTRIBUTING.md">
+      <Filter>c++on-repo</Filter>
+    </None>
+    <None Include="..\LICENSE">
+      <Filter>c++on-repo</Filter>
+    </None>
+    <None Include="..\README.md">
+      <Filter>c++on-repo</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="..\benchmarks\CMakeLists.txt">
+      <Filter>c++on-repo\benchmarks</Filter>
+    </Text>
+    <Text Include="..\examples\CMakeLists.txt">
+      <Filter>c++on-repo\examples</Filter>
+    </Text>
+    <Text Include="..\tests\CMakeLists.txt">
+      <Filter>c++on-repo\tests</Filter>
+    </Text>
+    <Text Include="..\CMakeLists.txt">
+      <Filter>c++on-repo</Filter>
+    </Text>
+  </ItemGroup>
+</Project>
