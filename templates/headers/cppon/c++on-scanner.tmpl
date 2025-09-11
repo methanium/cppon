@@ -1,0 +1,413 @@
+/*
+ * C++ON - High performance C++17 JSON parser with extended features
+ * https://github.com/methanium/cppon
+ *
+ * File: c++on-scanner.h : C++ON User-defined literals
+ *
+ * MIT License
+ * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
+ *
+ * See LICENSE file for complete license details
+ */
+
+#ifndef CPPON_SCANNER_H
+#define CPPON_SCANNER_H
+
+[[@UBER ? @STDCAPTURE : <string_view>]]
+[[@UBER ? @STDCAPTURE : <limits>]]
+[[@UBER ? @STDCAPTURE : <cstdint>]]
+[[@UBER ? @STDCAPTURE : <cstring>]]
+[[@UBER ? @STDCAPTURE : <cassert>]]
+
+namespace ch5 {
+
+// SWAR constants
+constexpr uint64_t kOnes = 0x0101010101010101ULL;   // (~0ULL / 255)
+constexpr uint64_t kHigh = 0x8080808080808080ULL;   // (~0ULL / 255) * 128
+
+inline uint64_t m64_load_aligned(const char* p) noexcept {
+    assert((reinterpret_cast<uintptr_t>(p) & 7u) == 0 && "Pointer must be 8-byte aligned for m64 load");
+    return *reinterpret_cast<const uint64_t*>(p);
+}
+inline uint64_t m64_load_unaligned(const char* p) noexcept {
+    uint64_t v; std::memcpy(&v, p, sizeof(v)); return v;
+}
+
+inline uint64_t m64_load_aligned(std::string_view Text, size_t Ofs = 0) noexcept {
+	assert(Text.size() >= Ofs + 8);
+    return m64_load_aligned(Text.data() + Ofs);
+}
+inline uint64_t m64_load_unaligned(std::string_view Text, size_t Ofs = 0) noexcept {
+    assert(Text.size() >= Ofs + 8);
+    return m64_load_unaligned(Text.data() + Ofs);
+}
+
+constexpr inline uint64_t byte_mask(uint8_t b) noexcept { return uint64_t(b) * kOnes; }
+constexpr inline uint64_t zero_byte_mask(uint64_t v) noexcept { return uint64_t((v - kOnes) & ~v) & kHigh; }
+constexpr inline uint64_t lt_byte_mask(uint64_t x, uint8_t n) noexcept { return (x - byte_mask(n)) & kHigh; }
+constexpr inline uint64_t gt_byte_mask(uint64_t x, uint8_t n) noexcept { return (byte_mask(n) - x) & kHigh; }
+constexpr inline uint64_t eq_byte_mask(uint64_t x, uint8_t b) noexcept { return zero_byte_mask(x ^ byte_mask(b)); }
+
+// Outside ['0'..'9']
+ // même chose que (lt_byte_mask(x, '0') | gt_byte_mask(x, '9')) mais économise une opération (& kHigh)
+constexpr inline uint64_t not_digit_mask(uint64_t x) noexcept {
+    const uint64_t v = x ^ byte_mask('0');
+	return gt_byte_mask(v, 9); // high bit si v > 9 => non-chiffre
+}
+
+// Non-space mask (high bit set where byte is NOT a space)
+constexpr inline uint64_t not_space_mask(uint64_t x) noexcept {
+#ifndef CPPON_TRUSTED_INPUT
+    // JSON strict spaces: ' ', '\t', '\n', '\r'
+    const uint64_t ws = 
+            (eq_byte_mask(x, static_cast<uint8_t>(' ')) |
+            eq_byte_mask(x, static_cast<uint8_t>('\t')) |
+            eq_byte_mask(x, static_cast<uint8_t>('\n')) |
+            eq_byte_mask(x, static_cast<uint8_t>('\r')));
+    return (~ws) & kHigh;
+#else
+    // Trusted input: whitespace 0x01..0x20 (non-zero controls). Test: (c-1) < 0x20 ⇒ space
+    const uint64_t y = x - kOnes;                  // c - 1
+    const uint64_t ws = gt_byte_mask(y, 0x1fu);    // high bit if (c-1) >= 0x20
+    return ws & kHigh;                             // high bit if NOT space
+#endif
+}
+
+constexpr inline bool has_zero_byte(uint64_t v) noexcept { return zero_byte_mask(v) != 0; }
+constexpr inline bool has_byte_less_than(uint64_t x, int8_t n) noexcept { return lt_byte_mask(x, static_cast<uint8_t>(n)) != 0; }
+constexpr inline bool has_byte_greater_than(uint64_t x, int8_t n) noexcept { return gt_byte_mask(x, static_cast<uint8_t>(n)) != 0; }
+constexpr inline bool has_byte(uint64_t x, int8_t b) noexcept { return eq_byte_mask(x, static_cast<uint8_t>(b)) != 0; }
+
+/**
+ * SWAR parallel comparison functions
+ */
+inline const char* m64_parallel_digits(std::string_view Text, size_t Ofs, size_t Count) noexcept {
+    assert(Text.size() >= Ofs + Count);
+    const char* p   = Text.data() + Ofs;
+    const char* end = Text.data() + Ofs + Count;
+
+    // Align
+    while (p <= end && (reinterpret_cast<uintptr_t>(p) & 7u)) {
+        const unsigned char c = static_cast<unsigned char>(*p);
+        if ((c - 0x30u) > 0x09u) return p;
+        ++p;
+    }
+    // Aligned Words
+    while (p + 8 <= end) {
+        uint64_t w = m64_load_aligned(p);
+        uint64_t mask = not_digit_mask(w);
+        if (mask) {
+            #if defined(_MSC_VER)
+            unsigned long tz; _BitScanForward64(&tz, mask); return p + (tz >> 3);
+            #else
+            return p + (static_cast<unsigned>(__builtin_ctzll(mask)) >> 3);
+            #endif
+        }
+        p += 8;
+    }
+    // Unaligned Tail
+    while (p <= end) {
+        const unsigned char c = static_cast<unsigned char>(*p);
+        if ((c - 0x30u) > 0x09u) return p;
+        ++p;
+    }
+    return nullptr;
+}
+inline const char* m64_parallel_digits(std::string_view Text, size_t Ofs) noexcept {
+    return m64_parallel_digits(Text, Ofs, Text.size() - Ofs);
+}
+inline const char* m64_parallel_digits(std::string_view Text) noexcept {
+    return m64_parallel_digits(Text, 0, Text.size());
+}
+
+inline const char* m64_parallel_find_quote(std::string_view Text, size_t Ofs, size_t Count) noexcept {
+	assert(Text.size() >= Ofs + Count);
+    const char* p = Text.data() + Ofs;
+    const char* end = Text.data() + Ofs + Count;
+
+    // Align to 8 bytes
+    while (p < end && (reinterpret_cast<uintptr_t>(p) & 7u)) {
+        if (*p == '"') return p;
+        ++p;
+    }
+    // Aaligned Words
+    while (p + 8 <= end) {
+        uint64_t w = m64_load_aligned(p);
+        uint64_t mask = eq_byte_mask(w, static_cast<uint8_t>('"'));
+        if (mask) {
+            #if defined(_MSC_VER)
+            unsigned long tz; _BitScanForward64(&tz, mask); return p + (tz >> 3);
+            #else
+            return p + (static_cast<unsigned>(__builtin_ctzll(mask)) >> 3);
+            #endif
+        }
+        p += 8;
+    }
+    // Unaligned Tail
+    while (p < end) {
+        if (*p == '"') return p;
+        ++p;
+    }
+    return nullptr;
+}
+inline const char* m64_parallel_find_quote(std::string_view Text, size_t Ofs) noexcept {
+    return m64_parallel_find_quote(Text, Ofs, Text.size() - Ofs);
+}
+inline const char* m64_parallel_find_quote(std::string_view Text) noexcept {
+    return m64_parallel_find_quote(Text, 0, Text.size());
+}
+
+inline const char* m64_parallel_skip_spaces(std::string_view Text, size_t Ofs, size_t Count) noexcept {
+    assert(Text.size() >= Ofs + Count);
+    const char* p = Text.data() + Ofs;
+    const char* end = Text.data() + Ofs + Count;
+
+    // Align
+    while (p < end && (reinterpret_cast<uintptr_t>(p) & 7u)) {
+        const unsigned char c = static_cast<unsigned char>(*p);
+        #ifndef CPPON_TRUSTED_INPUT
+        if (c != 0x20 && c != '\t' && c != '\n' && c != '\r') return p;
+        #else
+        if ((c - 1u) >= 0x20) return p;
+        #endif
+        ++p;
+    }
+    // Aligned Words
+    while (p + 8 <= end) {
+        uint64_t w = m64_load_aligned(p);
+        uint64_t mask = not_space_mask(w);
+        if (mask) { // Not all spaces
+            #if defined(_MSC_VER)
+            unsigned long tz; _BitScanForward64(&tz, mask); return p + (tz >> 3);
+            #else
+            return p + (static_cast<unsigned>(__builtin_ctzll(mask)) >> 3);
+            #endif
+        }
+        p += 8;
+    }
+    // Unaligned Tail
+    while (p < end) {
+        const unsigned char c = static_cast<unsigned char>(*p);
+        #ifndef CPPON_TRUSTED_INPUT
+        if (c != 0x20 && c != '\t' && c != '\n' && c != '\r') return p;
+        #else
+        if ((c - 1u) >= 0x20) return p;
+        #endif
+        ++p;
+    }
+    return nullptr;
+}
+inline const char* m64_parallel_skip_spaces(std::string_view Text, size_t Ofs) noexcept {
+    return m64_parallel_skip_spaces(Text, Ofs, Text.size() - Ofs);
+}
+inline const char* m64_parallel_skip_spaces(std::string_view Text) noexcept {
+    return m64_parallel_skip_spaces(Text, 0, Text.size());
+}
+
+inline size_t m64_parallel_digits_pos(std::string_view Text, size_t Ofs, size_t Count) noexcept {
+    assert(Text.size() >= Ofs + Count);
+    const char* Found = m64_parallel_digits(Text, Ofs, Count);
+    return Found ? static_cast<size_t>(Found - Text.data()) : Text.npos;
+}
+inline size_t m64_parallel_digits_pos(std::string_view Text, size_t Ofs) noexcept {
+    assert(Text.size() >= Ofs);
+    const char* Found = m64_parallel_digits(Text, Ofs, Text.size() - Ofs);
+    return Found ? static_cast<size_t>(Found - Text.data()) : Text.npos;
+}
+inline size_t m64_parallel_digits_pos(std::string_view Text) noexcept {
+    const char* Found = m64_parallel_digits(Text, 0, Text.size());
+    return Found ? static_cast<size_t>(Found - Text.data()) : Text.npos;
+}
+
+inline size_t m64_parallel_find_quote_pos(std::string_view Text, size_t Ofs, size_t Count) noexcept {
+    assert(Text.size() >= Ofs + Count);
+    const char* Found = m64_parallel_find_quote(Text, Ofs, Count);
+    return Found ? static_cast<size_t>(Found - Text.data()) : Text.npos;
+}
+inline size_t m64_parallel_find_quote_pos(std::string_view Text, size_t Ofs) noexcept {
+    assert(Text.size() >= Ofs);
+    const char* Found = m64_parallel_find_quote(Text, Ofs, Text.size() - Ofs);
+    return Found ? static_cast<size_t>(Found - Text.data()) : Text.npos;
+}
+inline size_t m64_parallel_find_quote_pos(std::string_view Text) noexcept {
+    const char* Found = m64_parallel_find_quote(Text, 0, Text.size());
+    return Found ? static_cast<size_t>(Found - Text.data()) : Text.npos;
+}
+
+inline size_t m64_parallel_skip_spaces_pos(std::string_view Text, size_t Ofs, size_t Count) noexcept {
+    assert(Text.size() >= Ofs + Count);
+    const char* Found = m64_parallel_skip_spaces(Text, Ofs, Count);
+    return Found ? static_cast<size_t>(Found - Text.data()) : Text.npos;
+}
+inline size_t m64_parallel_skip_spaces_pos(std::string_view Text, size_t Ofs) noexcept {
+    assert(Text.size() >= Ofs);
+    const char* Found = m64_parallel_skip_spaces(Text, Ofs, Text.size() - Ofs);
+    return Found ? static_cast<size_t>(Found - Text.data()) : Text.npos;
+}
+inline size_t m64_parallel_skip_spaces_pos(std::string_view Text) noexcept {
+    const char* Found = m64_parallel_skip_spaces(Text, 0, Text.size());
+    return Found ? static_cast<size_t>(Found - Text.data()) : Text.npos;
+}
+
+} // namespace ch5
+
+#if CPPON_USE_SIMD
+    #include "../simd/simd_comparisons.h"
+    #include "../platform/processor_features_info.h"
+    #include <atomic>
+
+    namespace ch5 {
+    namespace scanner {
+        // Dynamic detection of SIMD capabilities
+        enum class SimdLevel {
+            None,
+            SSE,
+            AVX2,
+            AVX512
+        };
+
+        // Lazily bound function pointer dispatch
+        using find_quote_fn = size_t(*)(std::string_view, size_t);
+        using scan_digits_fn = const char* (*)(std::string_view, size_t);
+
+        inline find_quote_fn bind_find_quote_pos(SimdLevel lvl) noexcept {
+            switch (lvl) {
+            case SimdLevel::AVX512: return simd::zmm_parallel_find_quote_pos;
+            case SimdLevel::AVX2:   return simd::ymm_parallel_find_quote_pos;
+            case SimdLevel::SSE:    return simd::xmm_parallel_find_quote_pos;
+            default:                return m64_parallel_find_quote_pos;
+            }
+        }
+        inline scan_digits_fn bind_parallel_digits(SimdLevel lvl) noexcept {
+            switch (lvl) {
+            case SimdLevel::AVX512: return simd::zmm_parallel_digits;
+            case SimdLevel::AVX2:   return simd::ymm_parallel_digits;
+            case SimdLevel::SSE:    return simd::xmm_parallel_digits;
+            default:                return m64_parallel_digits;
+            }
+        }
+
+        // Active function pointers (per thread)
+        struct local_storage {
+            inline static SimdLevel MaxSimdLevel = ([]() noexcept -> SimdLevel {
+                platform::processor_features_info cpu_info;
+                auto features = cpu_info.cpu_features();
+                if (features.AVX512F) return SimdLevel::AVX512;
+                if (features.AVX2)    return SimdLevel::AVX2;
+                if (features.SSE4_2)  return SimdLevel::SSE;
+                return SimdLevel::None;
+                })();
+            inline static thread_local find_quote_fn  p_find_quote = bind_find_quote_pos(MaxSimdLevel);
+            inline static thread_local scan_digits_fn p_scan_digits = bind_parallel_digits(MaxSimdLevel);
+            inline static thread_local int simd_override_thread = -1;
+        };
+
+        inline void ensure_dispatch_bound() noexcept;
+
+        // Global process-wide override; -1 = none
+        inline namespace simd_config {
+            inline std::atomic<int> g_simd_override_global{ -1 };
+
+            inline SimdLevel cap_to_supported(SimdLevel lvl) noexcept {
+                return (static_cast<int>(lvl) <= static_cast<int>(local_storage::MaxSimdLevel)) ? lvl : local_storage::MaxSimdLevel;
+            }
+            inline void set_simd_override_global(SimdLevel lvl) noexcept {
+                g_simd_override_global.store(static_cast<int>(cap_to_supported(lvl)), std::memory_order_relaxed);
+                ensure_dispatch_bound();
+            }
+            inline void clear_simd_override_global() noexcept {
+                g_simd_override_global.store(-1, std::memory_order_relaxed);
+                ensure_dispatch_bound();
+            }
+            inline void set_simd_override_thread(SimdLevel lvl) noexcept {
+                local_storage::simd_override_thread = static_cast<int>(cap_to_supported(lvl));
+                ensure_dispatch_bound();
+            }
+            inline void clear_simd_override_thread() noexcept {
+                local_storage::simd_override_thread = -1;
+                ensure_dispatch_bound();
+            }
+            inline bool has_simd_override() noexcept {
+                return local_storage::simd_override_thread >= 0 || g_simd_override_global.load(std::memory_order_relaxed) >= 0;
+            }
+            inline SimdLevel current_simd_override() noexcept {
+                if (local_storage::simd_override_thread >= 0) return static_cast<SimdLevel>(local_storage::simd_override_thread);
+                int v = g_simd_override_global.load(std::memory_order_relaxed);
+                return v < 0 ? SimdLevel::None : static_cast<SimdLevel>(v);
+            }
+        }
+
+        inline void bind_dispatch(SimdLevel lvl) noexcept {
+            local_storage::p_find_quote = bind_find_quote_pos(lvl);
+            local_storage::p_scan_digits = bind_parallel_digits(lvl);
+        }
+
+        inline SimdLevel detect_simd_level() noexcept {
+            if (has_simd_override()) { // Honor override first
+                return cap_to_supported(current_simd_override());
+            }
+            return local_storage::MaxSimdLevel;
+        }
+
+        inline void ensure_dispatch_bound() noexcept {
+            bind_dispatch(detect_simd_level());
+        }
+
+        // Hot-path APIs
+        inline size_t find_quote_pos(std::string_view text, size_t start = 0) noexcept {
+            return local_storage::p_find_quote(text, start);
+        }
+
+        inline const char* scan_digits(std::string_view text, size_t start = 0) noexcept {
+            return local_storage::p_scan_digits(text, start);
+        }
+    }
+    // Public export of SIMD override helpers at ch5 scope
+    using scanner::SimdLevel;
+    inline void set_global_simd_override(scanner::SimdLevel lvl) noexcept {
+        scanner::set_simd_override_global(lvl);
+    }
+    inline void clear_global_simd_override() noexcept {
+        scanner::clear_simd_override_global();
+    }
+    inline void set_thread_simd_override(scanner::SimdLevel lvl) noexcept {
+        scanner::set_simd_override_thread(lvl);
+    }
+    inline void clear_thread_simd_override() noexcept {
+        scanner::clear_simd_override_thread();
+    }
+    inline SimdLevel effective_simd_level() noexcept {
+        return scanner::detect_simd_level();
+    }
+    }
+#else
+    // Implementations without SIMD
+    namespace ch5 {
+    namespace scanner {
+        enum class SimdLevel {
+            None,
+            SSE,
+            AVX2,
+            AVX512
+        };
+
+        // Scalar implementation (fallback)
+        inline size_t find_quote_pos(std::string_view text, size_t start = 0) noexcept {
+            return m64_parallel_find_quote_pos(text, start);
+        }
+
+        inline const char* scan_digits(std::string_view text, size_t start = 0) noexcept {
+            return m64_parallel_digits(text, start);
+        }
+    }
+    // No-SIMD build: keep API stable with no-op stubs
+    using scanner::SimdLevel;
+    inline void set_global_simd_override(scanner::SimdLevel) noexcept {}
+    inline void clear_global_simd_override() noexcept {}
+    inline void set_thread_simd_override(scanner::SimdLevel) noexcept {}
+    inline void clear_thread_simd_override() noexcept {}
+    inline scanner::SimdLevel effective_simd_level() noexcept { return scanner::SimdLevel::None; }
+    }
+#endif
+
+#endif // CPPON_SCANNER_H

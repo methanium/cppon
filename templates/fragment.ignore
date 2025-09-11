@@ -1,0 +1,51 @@
+/*
+ * C++ON - Fragment Ignore List
+ * 
+ * This file lists all [[TAG]] patterns that should be ignored
+ * during the generation of header files.
+ * 
+ * Includes primarily:
+ * - Standard C++ attributes ([[nodiscard]], etc.)
+ * - Compiler-specific attributes
+ * - Any other tags that should not be interpreted as injection points
+ *
+ * Format: one tag per line, without the outer brackets
+ * Example: to ignore [[nodiscard]], simply write "nodiscard"
+ */
+
+# Standard C++11/14/17 attributes
+noreturn
+carries_dependency
+deprecated
+nodiscard
+maybe_unused
+fallthrough
+
+# Standard C++20 attributes
+likely
+unlikely
+no_unique_address
+
+# Standard C++23 attributes
+assume
+expect
+
+# GCC-specific extensions
+gnu::packed
+gnu::aligned
+gnu::always_inline
+gnu::const
+gnu::pure
+
+# Clang-specific extensions
+clang::fallthrough
+clang::nodiscard
+clang::no_sanitize
+
+# MSVC-specific extensions
+msvc::forceinline
+msvc::deprecated
+msvc::novtable
+
+# Other tags to ignore (project-specific)
+# Add custom tags to ignore here

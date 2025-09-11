@@ -1,0 +1,56 @@
+{
+  "fragments": {
+    "ASSERT_MACRO": [
+      "#ifdef NDEBUG",
+      "#define CPPON_ASSERT(cond) ((void)0)",
+      "#else",
+      "#define CPPON_ASSERT(cond) assert(cond)",
+      "#endif"
+    ],
+    "COMMENT_STDLIB": [
+      "// -----------------------------------------------------------------------------",
+      "// SECTION: Standard Library Includes",
+      "// -----------------------------------------------------------------------------",
+      "// All required C++ standard library headers are consolidated here for clarity",
+      "// and to ensure consistent inclusion order throughout the library.",
+      "// -----------------------------------------------------------------------------"
+    ],
+    "COMMENT_UBER": [
+      "// -----------------------------------------------------------------------------",
+      "// C++ON Uber Header",
+      "// -----------------------------------------------------------------------------",
+      "// This is the single-include header for the C++ON library.",
+      "//",
+      "// Including this file gives you access to all features of C++ON:",
+      "//   - High-performance JSON parsing and generation",
+      "//   - SIMD-accelerated processing (SSE, AVX2, AVX-512)",
+      "//   - Path-based navigation (absolute/relative)",
+      "//   - Cross-references and binary blobs",
+      "//   - Extended C++ type support",
+      "//   - Thread-safety and more",
+      "//",
+      "// Usage:",
+      "//   #include <cppon/c++on.h>",
+      "//",
+      "// This header includes all necessary components in the correct order.",
+      "// For modular development, you can include only the headers you need from the",
+      "// main include/ directory. For deployment or end-user integration, prefer this",
+      "// single header for simplicity and maximum compatibility.",
+      "// -----------------------------------------------------------------------------"
+    ]
+  },
+  "headers": {
+    "EXCEPTIONS": "c++on-exceptions.tmpl",
+    "ALTERNATIVES": "c++on-alternatives.tmpl",
+    "TYPES": "c++on-types.tmpl",
+    "SCANNER": "c++on-scanner.tmpl",
+    "PARSER": "c++on-parser.tmpl",
+    "VISITORS": "c++on-visitors.tmpl",
+    "REFERENCES": "c++on-references.tmpl",
+    "PRINTER": "c++on-printer.tmpl",
+    "LITERALS": "c++on-literals.tmpl",
+    "PROCESSOR_FEATURES_INFO": "processor_features_info.tmpl",
+    "SIMD_COMPARISONS": "simd_comparisons.tmpl",
+    "CPPON": "c++on.tmpl"
+  }
+}

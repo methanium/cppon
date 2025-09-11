@@ -1,0 +1,700 @@
+/*
+ * Processor Features Info - C++ library
+ * https://github.com/methanium/cppon
+ *
+ * MIT License
+ * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
+ *
+ * See LICENSE file for complete license details
+ */
+
+#ifndef PROCESSOR_FEATURES_INFO_H
+#define PROCESSOR_FEATURES_INFO_H
+
+#if defined(_MSC_VER)
+    #ifndef WORD
+        #define NOMINMAX
+        #include <Windows.h>
+    #endif
+    #if defined (__clang__)
+        #include <x86intrin.h>
+    #else
+        #include <intrin.h>
+    #endif
+    #ifndef ulong
+        typedef unsigned long ulong;
+    #endif
+#elif defined(__GNUC__) || defined(__clang__)
+    #include <stdint.h>
+    #include <string.h>
+    #include <cpuid.h>
+    #include <unistd.h>
+    #include <sys/sysinfo.h>
+    #include <pthread.h>
+    #include <x86intrin.h>
+
+    #ifndef WORD
+        typedef uint16_t WORD;
+    #endif
+    #ifndef ulong
+        typedef unsigned long ulong;
+    #endif
+    #ifndef _tzcnt_u32
+        #define _tzcnt_u32 __tzcnt_u32
+    #endif
+    #ifndef _tzcnt_u64
+        #define _tzcnt_u64 __tzcnt_u64
+    #endif
+    #if !defined(__AVX512F__) && !defined(__mmask64)
+        typedef unsigned long long __mmask64;
+    #endif
+#endif
+
+#include <cassert>
+#include <string_view>
+
+namespace platform {
+
+/**
+ * @brief Detects and provides information about processor features
+ *
+ * This class encapsulates detection of SIMD capabilities (SSE, AVX, AVX-512) and other
+ * processor features that can be used to optimize performance-critical code paths.
+ * Supports runtime detection of CPU instructions across different platforms.
+ */
+class processor_features_info
+{
+private:
+	union cpu_probe_t
+		{
+		mutable int data[ 4 ];
+		struct {
+			unsigned rEAX;
+			unsigned rEBX;
+			unsigned rECX;
+			unsigned rEDX;
+			};
+		cpu_probe_t( );
+		cpu_probe_t( unsigned Function );
+		cpu_probe_t( unsigned Function, unsigned Leaf );
+		cpu_probe_t const& operator()( unsigned Function ) const;
+		cpu_probe_t const& operator()( unsigned Function, unsigned Leaf ) const;
+		};
+
+public:
+	struct version_info_t
+	{
+		unsigned stepping : 4; // Processor Stepping
+		unsigned model    : 4; // Processor Model
+		unsigned family   : 4; // Processor Family
+		unsigned type     : 2; // 00: Original OEM Processor, 01: Intel OverDrive Processor, 10: Dual Processor, 11: Reserved
+		unsigned reserved2: 2; // Reserved
+		unsigned modelEx  : 4; // Extended Model
+		unsigned familyEx : 8; // Extended Family
+		unsigned reserved4: 4; // Reserved
+
+		version_info_t(unsigned data);
+	};
+
+	struct model_info_t
+	{
+		unsigned brandIndex   : 8; // Brand Index
+		unsigned cacheLineLen : 8; // The size of the CLFLUSH cache line, in quadwords
+		unsigned logicalCPUs  : 8; // The maximum number of addressable IDs for logical processors in this physical package
+		unsigned localApicId  : 8; // The initial APIC ID of the processor
+
+		model_info_t(unsigned data);
+	};
+
+	struct features_info_t
+	{
+		unsigned FloatingPointUnit        : 1; // On-Chip x87 FPU
+		unsigned VirtualModeEnhancements  : 1; // Virtual 8086 Mode Enhancements
+		unsigned DebuggingExtensions      : 1; // Debugging Extensions
+		unsigned PageSizeExtension        : 1; // Page Size Extension
+		unsigned TimeStampCounter         : 1; // Time Stamp Counter
+		unsigned ModelSpecificRegisters   : 1; // Model Specific Registers
+		unsigned PhysicalAddressExtension : 1; // Physical Address Extension
+		unsigned MachineCheckException    : 1; // Machine Check Exception
+		unsigned CAS2                     : 1; // CMPXCHG8B Instruction
+		unsigned APIC                     : 1; // APIC On-Chip
+		unsigned reserved_10              : 1; // Reserved
+		unsigned SysEnterAndSysExit       : 1; // SYSENTER and SYSEXIT Instructions
+		unsigned MemoryTypeRangeRegisters : 1; // Memory Type Range Registers
+		unsigned PTEGlobalBit             : 1; // PTE Global Bit
+		unsigned MachineCheckArchitecture : 1; // Machine Check Architecture
+		unsigned CMOV                     : 1; // CMOV Instruction
+		unsigned PageAttributeTable       : 1; // Page Attribute Table
+		unsigned PageSizeExtension36      : 1; // 36-bit Page Size Extension
+		unsigned ProcessorSerialNumber    : 1; // Processor Serial Number
+		unsigned CLFLUSH                  : 1; // CLFLUSH Instruction
+		unsigned reserved_20              : 1; // Reserved
+		unsigned DebugStore               : 1; // Debug Store
+		unsigned ACPI                     : 1; // Thermal Monitor & Software Controlled Clock
+		unsigned MMX                      : 1; // Intel MMX Technology
+		unsigned FXSaveAndFXRStore        : 1; // FXSAVE and FXRSTOR Instructions
+		unsigned SSE                      : 1; // SSE Extensions
+		unsigned SSE2                     : 1; // SSE2 Extensions
+		unsigned SelfSnoop                : 1; // Self-Snoop
+		unsigned HyperThreading           : 1; // Multi-core CPU (AMD)
+		unsigned ThermalMonitor           : 1; // Thermal Monitor
+		unsigned IA64                     : 1; // IA64 Processor Emulating x86
+		unsigned PendingBreakEnable       : 1; // Pending Break Enable
+
+		features_info_t(unsigned data);
+	};
+
+	struct features_info_ex_t
+	{
+		unsigned SSE3                     : 1; // SSE3 Extensions
+		unsigned PCLMUL                   : 1; // PCLMULQDQ
+		unsigned DTES64                   : 1; // 64-bit Debug Trace and EMON Store MSRs
+		unsigned MONITOR                  : 1; // MONITOR/MWAIT Instructions
+		unsigned DSCPL                    : 1; // CPL Qualified Debug Store	- Reserved (AMD)
+		unsigned VMX                      : 1; // Virtual Machine Technology	- Reserved (AMD)
+		unsigned SMX                      : 1; // Virtual Machine Technology	- Reserved (AMD)
+		unsigned EST                      : 1; // Enhanced SpeedStep Technology- Reserved (AMD)
+		unsigned TM2                      : 1; // Thermal Monitor 2			- Reserved (AMD)*
+		unsigned SSSE3                    : 1; // SSSE3 Supplemental Streaming SIMD Extensions 3
+		unsigned CID                      : 1; // Context ID: the L1 data cache can be set to adaptive or shared mode- Reserved (AMD)
+		unsigned SDBG                     : 1; // Silicon Debug Interface		- Reserved (AMD)
+		unsigned FMA256                   : 1; // 256-bit FMA extensions		- Reserved (AMD)
+		unsigned CX16                     : 1; // CMPXCHG16B
+		unsigned ETPRD                    : 1; // xTPR Update Control
+		unsigned PDCM                     : 1; // Perf/Debug Capability MSR
+		unsigned reserved_16              : 1; // Reserved
+		unsigned PCID                     : 1; // Proccess Context Identifier
+		unsigned DCA                      : 1; // Direct Cache Access			- Reserved (AMD)
+		unsigned SSE4_1                   : 1; // SSSE3 Extensions SSE4.1
+		unsigned SSE4_2                   : 1; // SSSE3 Extensions SSE4.2
+		unsigned X2APIC                   : 1; // x2APIC support (Intel)		- Reserved (AMD)
+		unsigned MOVBE                    : 1; // MOVBE support (Intel)		- Reserved (AMD)
+		unsigned POPCNT                   : 1; // SSSE3 Extensions
+		unsigned TSC_Deadline             : 1; // TSC Deadline
+		unsigned AES                      : 1; // Reserved (AMD)
+		unsigned XSAVE                    : 1; // Reserved (AMD)
+		unsigned OSXSAVE                  : 1; // Reserved (AMD)
+		unsigned AVX                      : 1; // Reserved (AMD)
+		unsigned F16C                     : 1; // 16-bit floating-point conversion instructions
+		unsigned RDRAND                   : 1; // RDRAND instruction
+		unsigned ZERO                     : 1; // Reserved
+
+		features_info_ex_t(unsigned data);
+	};
+
+	struct structured_extended_features_t {
+		unsigned FSGSBASE    : 1; // FSGSBASE instructions
+		unsigned PREFETCHWT1 : 1; // PREFETCHWT1 from ECX
+		unsigned AVX512VBMI  : 1; // AVX512VBMI from ECX
+		unsigned BMI1        : 1; // Bit Manipulation Instruction Set 1
+		unsigned HLE         : 1; // Hardware Lock Elision
+		unsigned AVX2        : 1; // Advanced Vector Extensions 2
+		unsigned Reserved_6  : 1; // Reserved
+		unsigned SMEP        : 1; // Supervisor Mode Execution Protection
+
+		unsigned BMI2        : 1; // Bit Manipulation Instruction Set 2
+		unsigned ERMS        : 1; // Enhanced REP MOVSB/STOSB
+		unsigned INVPCID     : 1; // INVPCID instruction
+		unsigned RTM         : 1; // Restricted Transactional Memory
+		unsigned Reserved_12 : 2; // Reserved
+		unsigned Intel_MPE   : 1; // Intel Memory Protection Extensions
+		unsigned Reserved_15 : 1; // Reserved
+
+		unsigned AVX512F     : 1; // AVX-512 Foundation Instructions
+		unsigned AVX512DQ    : 1; // AVX-512 Doubleword and Quadword Instructions
+		unsigned RDSEED      : 1; // RDSEED instruction
+		unsigned ADX         : 1; // Multi-Precision Add-Carry Instruction Extensions
+		unsigned SMAP        : 1; // Supervisor Mode Access Prevention
+		unsigned AVX512IFMA  : 1; // AVX-512 Integer Fused Multiply-Add Instructions
+		unsigned PCOMMIT     : 1; // PCOMMIT instruction
+		unsigned CLFLUSHOPT  : 1; // CLFLUSHOPT instruction
+
+		unsigned CLWB        : 1; // CLWB instruction
+		unsigned Intel_PT    : 1; // Intel Processor Trace
+		unsigned AVX512PF    : 1; // AVX-512 Prefetch Instructions
+		unsigned AVX512ER    : 1; // AVX-512 Exponential and Reciprocal Instructions
+		unsigned AVX512CD    : 1; // AVX-512 Conflict Detection Instructions
+		unsigned SHA         : 1; // SHA Extensions
+		unsigned AVX512BW    : 1; // AVX-512 Byte and Word Instructions
+		unsigned AVX512VL    : 1; // AVX-512 Vector Length Extensions
+
+		structured_extended_features_t(unsigned ebx, unsigned ecx, unsigned edx = 0);
+	};
+
+	/**
+	 * @brief Processor features summary structure
+	 *
+	 * Provides a simplified view of the most relevant CPU features
+	 * for SIMD optimization in a bit-field format.
+	 */
+	struct cpu_features_t {
+		struct {
+			WORD MMX         : 1; // MMX Technology
+			WORD SSE         : 1; // SSE Extensions
+			WORD SSE2        : 1; // SSE2 Extensions
+			WORD SSE3        : 1; // SSE3 Extensions
+			WORD SSSE3       : 1; // SSSE3 Extensions
+			WORD SSE4_1      : 1; // SSE4.1 Extensions
+			WORD SSE4_2      : 1; // SSE4.2 Extensions
+			WORD AES         : 1; // AES Instructions
+			WORD AVX         : 1; // AVX Instructions
+			WORD AVX2        : 1; // AVX2 Instructions
+			WORD HT          : 1; // Hyper-Threading Technology
+			WORD CMOV        : 1; // CMOV Instruction
+			WORD POPCNT      : 1; // POPCNT Instruction
+			WORD PCLMULDQ    : 1; // PCLMULQDQ Instruction
+			WORD CMPXCHG8B   : 1; // CMPXCHG8B Instruction
+			WORD CMPXCHG16B  : 1; // CMPXCHG16B Instruction
+			WORD FMA256      : 1; // Fused Multiply-Add (FMA) 256-bit
+			WORD AVX512F     : 1; // AVX-512 Foundation
+			WORD BMI1        : 1; // Bit Manipulation Instruction Set 1
+			WORD BMI2        : 1; // Bit Manipulation Instruction Set 2
+			WORD ADX         : 1; // Multi-Precision Add-Carry Instruction Extensions
+			WORD SHA         : 1; // SHA Extensions
+			WORD PREFETCHWT1 : 1; // PREFETCHWT1 Instruction
+		};
+		cpu_features_t(const features_info_t& Features, const features_info_ex_t& FeaturesEx, const structured_extended_features_t& ExtFeatures = structured_extended_features_t(0, 0, 0));
+	};
+
+	struct vendor_id_t;
+private:
+	struct info_t
+	{
+		version_info_t     Version;
+		model_info_t       Model;
+		features_info_ex_t FeaturesEx;
+		features_info_t    Features;
+
+		info_t(cpu_probe_t const& Probe);
+	};
+
+	info_t      Info;
+
+public:
+	processor_features_info();
+
+	/**
+	 * @brief Retrieves the processor vendor identification
+	 * @return Object containing vendor information (Intel, AMD, etc.)
+	 */
+	const vendor_id_t vendor_id(void) const;
+	const version_info_t& version_info(void) const;
+	const model_info_t& model_info(void) const;
+	const features_info_t& features_info(void) const;
+	const features_info_ex_t& features_info_ex(void) const;
+	/**
+	 * @brief Provides information about available SIMD instruction sets
+	 * @return Structure containing flags for SSE, AVX, AVX-512, etc.
+	 */
+	const cpu_features_t cpu_features(void) const;
+	const structured_extended_features_t structured_extended_features(void) const;
+};
+
+/*
+ * NOTE TO CONTRIBUTORS:
+ * This implementation is functional but still under development.
+ * Several areas are marked with comments for future improvement:
+ * - Additional CPUID leaf processing
+ * - Unused variables are kept for reference and future implementation
+ * - Some platform-specific optimizations could be added
+ *
+ * Feel free to contribute by implementing these features or improving
+ * the existing code structure.
+ */
+
+inline processor_features_info::cpu_probe_t::cpu_probe_t( ) {
+	}
+
+inline processor_features_info::cpu_probe_t::cpu_probe_t(unsigned Function) {
+	#if defined(_MSC_VER) || defined(__INTEL_COMPILER) && defined(_WIN32)
+		__cpuid(data, int(Function));
+	#elif defined(__GNUC__) || defined(__clang__)
+		__get_cpuid(Function, (unsigned int*)&data[0], (unsigned int*)&data[1],
+			(unsigned int*)&data[2], (unsigned int*)&data[3]);
+	#endif
+	}
+
+inline processor_features_info::cpu_probe_t::cpu_probe_t(unsigned Function, unsigned Leaf) {
+	#if defined(_MSC_VER) || defined(__INTEL_COMPILER) && defined(_WIN32)
+		__cpuidex(data, int(Function), int(Leaf));
+	#elif defined(__GNUC__) || defined(__clang__)
+		__cpuid_count(Function, Leaf, data[0], data[1], data[2], data[3]);
+	#endif
+	}
+
+inline processor_features_info::cpu_probe_t const& processor_features_info::cpu_probe_t::operator()(unsigned Function) const {
+	#if defined(_MSC_VER) || defined(__INTEL_COMPILER) && defined(_WIN32)
+		__cpuid(data, int(Function));
+	#elif defined(__GNUC__) || defined(__clang__)
+		__get_cpuid(Function, (unsigned int*)&data[0], (unsigned int*)&data[1],
+			(unsigned int*)&data[2], (unsigned int*)&data[3]);
+	#endif
+		return *this;
+	}
+
+inline processor_features_info::cpu_probe_t const& processor_features_info::cpu_probe_t::operator()(unsigned Function, unsigned Leaf) const {
+	#if defined(_MSC_VER) || defined(__INTEL_COMPILER) && defined(_WIN32)
+		__cpuidex(data, int(Function), int(Leaf));
+	#elif defined(__GNUC__) || defined(__clang__)
+		__cpuid_count(Function, Leaf, data[0], data[1], data[2], data[3]);
+	#endif
+		return *this;
+	}
+
+inline processor_features_info::version_info_t::version_info_t( unsigned data ){
+	*reinterpret_cast<unsigned*>( this ) = data;
+	}
+
+inline processor_features_info::model_info_t::model_info_t( unsigned data ){
+	*reinterpret_cast<unsigned*>( this ) = data;
+	}
+
+inline processor_features_info::features_info_t::features_info_t( unsigned data ){
+	*reinterpret_cast<unsigned*>( this ) = data;
+	}
+
+inline processor_features_info::features_info_ex_t::features_info_ex_t( unsigned data ){
+	*reinterpret_cast<unsigned*>( this ) = data;
+	}
+
+inline processor_features_info::structured_extended_features_t::structured_extended_features_t(unsigned ebx, unsigned ecx, unsigned edx) {
+	FSGSBASE = (ebx >> 0) & 1;
+	PREFETCHWT1 = (ecx >> 0) & 1;
+	AVX512VBMI = (ecx >> 1) & 1;
+	BMI1 = (ebx >> 3) & 1;
+	HLE = (ebx >> 4) & 1;
+	AVX2 = (ebx >> 5) & 1;
+	SMEP = (ebx >> 7) & 1;
+	Reserved_6 = (ebx >> 6) & 1;
+	BMI2 = (ebx >> 8) & 1;
+	ERMS = (ebx >> 9) & 1;
+	INVPCID = (ebx >> 10) & 1;
+	RTM = (ebx >> 11) & 1;
+	Reserved_12 = (ebx >> 12) & 1;
+	Reserved_12 |= ((ebx >> 13) & 1) << 1;
+	Intel_MPE = (ebx >> 14) & 1;
+	Reserved_15 = (ebx >> 15) & 1;
+
+	AVX512F = (ebx >> 16) & 1;
+	AVX512DQ = (ebx >> 17) & 1;
+	RDSEED = (ebx >> 18) & 1;
+	ADX = (ebx >> 19) & 1;
+	SMAP = (ebx >> 20) & 1;
+	AVX512IFMA = (ebx >> 21) & 1;
+	PCOMMIT = (ebx >> 22) & 1;
+	CLFLUSHOPT = (ebx >> 23) & 1;
+
+	CLWB = (ebx >> 24) & 1;
+	Intel_PT = (ebx >> 25) & 1;
+	AVX512PF = (ebx >> 26) & 1;
+	AVX512ER = (ebx >> 27) & 1;
+	AVX512CD = (ebx >> 28) & 1;
+	SHA = (ebx >> 29) & 1;
+	AVX512BW = (ebx >> 30) & 1;
+	AVX512VL = (ebx >> 31) & 1;
+	}
+
+struct processor_features_info::vendor_id_t
+	{
+	private:
+		char vendor[ 14 ];
+		char brand[ 50 ];
+
+	public:
+		vendor_id_t( cpu_probe_t const& Probe );
+
+		char const* vendor_begin( ) const;
+		char const* vendor_end( ) const;
+		char const* brand_begin( ) const;
+		char const* brand_end( ) const;
+	};
+
+inline processor_features_info::vendor_id_t::vendor_id_t(cpu_probe_t const& Probe)
+	{
+	memset(this, 0, sizeof *this);
+
+	// Probe(0x00000000);
+	unsigned maxProbeFunct = Probe.rEAX;
+	*(unsigned*)&vendor[0] = Probe.rEBX;
+	*(unsigned*)&vendor[4] = Probe.rEDX;
+	*(unsigned*)&vendor[8] = Probe.rECX;
+
+	if( 0x00000002 <= maxProbeFunct ) {
+		//	0x00000002; // Deterministic Cache Information
+		}
+	if( 0x00000003 <= maxProbeFunct ) {
+		//	0x00000003; // Monitor Feature Information
+		}
+	if( 0x00000004 <= maxProbeFunct ) {
+		//	0x00000004; // Deterministic Cache Parameters
+		Probe(0x00000004);
+		struct deterministic_cache_paramteters_t { // Probe.rEAX
+			deterministic_cache_paramteters_t( unsigned data, unsigned data_ex )
+				{
+				*reinterpret_cast<unsigned*>( this ) = data;
+				*reinterpret_cast<unsigned*>( this ) &= ~0x3800;
+				*reinterpret_cast<unsigned*>( this ) |= ( data_ex << 11 ) & 0x3800;
+				}
+			ulong has_no_more_cache_informations : 1; // Null - No more caches
+			ulong has_data_cache_in_informations : 1; // Data cache
+			ulong has_code_cache_in_informations : 1; // Instruction Cache
+			ulong has_both_cache_in_informations : 1; // Unified cache
+			ulong has_reserved_bit4_informations : 1; // RESERVED
+			ulong has_cache_level_n_informations : 3; // Cache level
+			ulong has_hw_self_initializing_cache : 1; // Self initializing cache level (no need SW init)
+			ulong has_hw_fully_associative_cache : 1; // Fully associative cache
+		//	ulong has_reserved_word_informations : 4; // RESERVED
+			ulong has_reserved_word_informations : 1; // RESERVED with new size
+			ulong has_wbinvd_invd_behavior_lower : 1; // WBINVD/INVD behavior on lower level caches - FROM ECX
+			ulong has_cache_inclusiveness_option : 1; // Cache inclusiveness                        - FROM ECX
+			ulong has_complex_cache_indexing_bit : 1; // Complex cache indexing                     - FROM ECX
+			ulong max_addr_id_logical_processors : 12;// Max addressable id's for logical processor sharing this cache
+			ulong max_addr_id_physical_cpu_cores : 6; // Max addressable id's for physical processor cores in the package
+			};
+		struct deterministic_cache_limits_t { // Probe.rEBX
+			deterministic_cache_limits_t( unsigned data )
+				{
+				*reinterpret_cast<unsigned*>( this ) = data;
+				}
+			ulong system_coherency_line_num_size : 12;// System coherency line size
+			ulong physical_line_partitions_count : 10;// Physical line partitions
+			ulong ways_of_connectivity_per_cache : 10;// Ways of associativity
+			};
+		deterministic_cache_paramteters_t(Probe.rEAX, Probe.rECX);
+		deterministic_cache_limits_t(Probe.rEBX);
+		//auto cacheParams = deterministic_cache_paramteters_t(Probe.rEAX, Probe.rECX);
+		//auto cacheLimits = deterministic_cache_limits_t(Probe.rEBX);
+		}
+	if( 0x00000005 <= maxProbeFunct ) {
+		//	0x00000005; // Monitor/Wait Feature Information
+		}
+	if( 0x00000006 <= maxProbeFunct ) {
+		//	0x00000006; // Digital Temperature/Power Management Information - Thermal and Power Management
+		}
+	if( 0x00000007 <= maxProbeFunct ) {
+		//	0x00000007; // Structured Extended feature
+		Probe(0x00000007);
+		//if( Probe.rEBX )
+		structured_extended_features_t( Probe.rEBX, Probe.rECX );
+		// Reports the maximum number sub-leaves that are supported in leaf 07H
+		// auto MaxSubLeaves = Probe.rEAX, Leaf = 0u;
+		// do { Probe( 0x00000007, ++Leaf ); } while( Leaf < MaxSubLeaves );
+		}
+	if( 0x00000009 <= maxProbeFunct ) {
+		// 0x00000009: Direct Cache Access Information
+		/*
+		EAX         : Value of bits [31:0] of IA32_PLATFORM_DCA_CAP MSR (address 1F8H)
+		EBX,ECX,EDX : Reserved
+
+		*/
+	//	__asm CMPEQ xmm0, xmm0; // set_one( void )
+		}
+	if( 0x0000000A <= maxProbeFunct ) {
+		//	0x0000000A; // Architectural Performance Monitoring Information
+		/*
+		EAX Bits 07 - 00: Version ID of architectural performance monitoring
+			Bits 15- 08: Number of general-purpose performance monitoring counter per logical processor
+			Bits 23 - 16: Bit width of general-purpose, performance monitoring counter
+			Bits 31 - 24: Length of EBX bit vector to enumerate architectural performance monitoring events
+		EBX Bit 00: Core cycle event not available if 1
+			Bit 01: Instruction retired event not available if 1
+			Bit 02: Reference cycles event not available if 1
+			Bit 03: Last-level cache reference event not available if 1
+			Bit 04: Last-level cache misses event not available if 1
+			Bit 05: Branch instruction retired event not available if 1
+			Bit 06: Branch mispredict retired event not available if 1
+			Bits 31- 07: Reserved = 0
+		ECX Reserved = 0
+		EDX Bits 04 - 00: Number of fixed-function performance counters (if Version ID > 1)
+			Bits 12- 05: Bit width of fixed-function performance counters (if Version ID > 1)
+			Bits 31- 13: Reserved = 0
+		*/
+		}
+	// 0xD - Processor Extended State Enumeration Main
+	/*
+	== Leaf 0DH main leaf (ECX = 0) ==
+	EAX Bits 31-00: Reports the valid bit fields of the lower 32 bits of the XFEATURE_ENABLED_MASK register.
+					If a bit is 0, the corresponding bit field in XCR0 is reserved.
+		Bit 00: legacy x87
+		Bit 01: 128-bit SSE
+		Bit 02: 256-bit AVX
+	EBX Bits 31-00: Maximum size (bytes, from the beginning of the XSAVE/XRSTOR save area) required by
+					enabled features in XCR0. May be different than ECX if some features at the end of the XSAVE save
+					area are not enabled.
+	ECX Bits 31-00:	Maximum size (bytes, from the beginning of the XSAVE/XRSTOR save area) of the
+					XSAVE/XRSTOR save area required by all supported features in the processor, i.e all the valid bit
+					fields in XCR0.
+	EDX Bits 31-00: Reports the valid bit fields of the upper 32 bits of the XCR0 register. If a bit is 0, the corresponding
+					bit field in XCR0 is reserved
+	==  Sub-leaf (EAX = 0DH, ECX = 1) ==
+	EAX Bit  00:    XSAVEOPT is available
+		Bits 31-1:  Reserved
+	EBX,ECX,EDX: -  Reserved
+	== Sub-leaves (EAX = 0DH, ECX = n, n > 1) ==
+	EAX Bits 31-0:  The size in bytes (from the offset specified in EBX) of the save area for an extended state
+					feature associated with a valid sub-leaf index, n. This field reports 0 if the sub-leaf index, n, is
+					invalid*.
+	EBX Bits 31-0:  The offset in bytes of this extended state component's save area from the beginning of
+					the XSAVE/XRSTOR area. This field reports 0 if the sub-leaf index, n, is invalid*.
+	ECX Bit 0		is set if the sub-leaf index, n, maps to a valid bit in the IA32_XSS MSR and bit 0 is clear if n maps
+					to a valid bit in XCR0. Bits 31-1 are reserved. This field reports 0 if the sub-leaf index, n, is invalid*.
+	EDX				This field reports 0 if the sub-leaf index, n, is invalid*; otherwise it is reserved.
+
+	*The highest valid sub-leaf index, n, is (POPCNT(CPUID.(EAX=0D, ECX=0):EAX) + POPCNT(CPUID.(EAX=0D, ECX=0):EDX) - 1)
+	*/
+	Probe(0x80000000);
+	unsigned maxExtended = Probe.rEAX;
+
+	Probe(0x80000001);
+	bool has_lahf_sahf_in_64bit_mode_on = ( Probe.rECX >> 0 ) & 1;  // LAHF/SAHF available in 64-bit mode
+	bool has_leading_zero_count_support = ( Probe.rECX >> 5 ) & 1;  // LZCNT instruction
+	bool has_prefetchw_instruction_code = ( Probe.rECX >> 8 ) & 1;  // PREFETCHW
+	bool has_fma4_instruction_available = ( Probe.rECX >> 16 ) & 1;
+	bool has_syscall_and_sysret_support = ( Probe.rEDX >> 11 ) & 1; // SYSCALL/SYSRET available (when in 64-bit mode)
+	bool has_execute_disable_bit_enable = ( Probe.rEDX >> 20 ) & 1;
+//	bool has_reserved_intel_feature_set = ( Probe.rEDX >> 27 ) & 1;
+	bool has_64bit_technology_available = ( Probe.rEDX >> 29 ) & 1;
+//	bool has_3DExt_technology_available = ( Probe.rEDX >> 30 ) & 1; // AMD
+//	bool has_3DNow_technology_available = ( Probe.rEDX >> 31 ) & 1; // AMD
+
+	unsigned maxBrand = maxExtended;
+	if(maxBrand > 0x80000004)
+		maxBrand = 0x80000004;
+	char* ptr = (char*)brand;
+	for(unsigned func=0x80000002; func <= maxBrand; ++func) {
+		memcpy(ptr, &Probe(func), sizeof Probe);
+		ptr += sizeof Probe;
+		}
+
+//	0x80000005 [0-3] [ 0-31] L1 cache and TLB identifiers (AMD) - Reserved (Intel)
+
+	if( 0x80000006 <= maxExtended ) {
+		/*
+		0x80000006 ECX  [ 0- 7] Cache line size in bytes
+		  	            [12-15] L2 associativity field encodings:
+								00H - Disabled
+								01H - Direct mapped
+								02H - 2-way
+								04H - 4-way
+								06H - 8-way
+								08H - 16-way
+								0FH - Fully associative
+		  	            [16-31] Cache size in 1K units
+		*/
+		}
+
+	//	0x80000007 [0-3] [ 0-31] Advanced power management information (AMD) - Reserved (Intel)
+
+	if( 0x80000008 <= maxExtended ) {
+		//	0x80000008 EAX [ 0- 7] Physical address bits
+		//	               [ 8-15] Virtual address bits
+		}
+	}
+
+inline char const* processor_features_info::vendor_id_t::vendor_begin( ) const {
+	return vendor;
+	}
+
+inline char const* processor_features_info::vendor_id_t::vendor_end( ) const {
+	return vendor + sizeof vendor - 2;
+	}
+
+inline char const* processor_features_info::vendor_id_t::brand_begin( ) const {
+	return brand;
+	}
+
+inline char const* processor_features_info::vendor_id_t::brand_end( ) const {
+	return brand + sizeof brand - 2;
+	}
+
+inline processor_features_info::cpu_features_t::cpu_features_t(
+	const features_info_t& Features,
+	const features_info_ex_t& FeaturesEx,
+	const structured_extended_features_t& ExtFeatures)
+	: MMX(Features.MMX)
+	, SSE(Features.SSE)
+	, SSE2(Features.SSE2)
+	, SSE3(FeaturesEx.SSE3)
+	, SSSE3(FeaturesEx.SSSE3)
+	, SSE4_1(FeaturesEx.SSE4_1)
+	, SSE4_2(FeaturesEx.SSE4_2)
+	, AES(FeaturesEx.AES)
+	, AVX(FeaturesEx.AVX)
+	, AVX2(ExtFeatures.AVX2)
+	, HT(Features.HyperThreading)
+	, CMOV(Features.CMOV)
+	, POPCNT(FeaturesEx.POPCNT)
+	, PCLMULDQ(FeaturesEx.PCLMUL)
+	, CMPXCHG8B(Features.CAS2)
+	, CMPXCHG16B(FeaturesEx.CX16)
+	, FMA256(FeaturesEx.FMA256)
+	, AVX512F(ExtFeatures.AVX512F)
+	, BMI1(ExtFeatures.BMI1)
+	, BMI2(ExtFeatures.BMI2)
+	, ADX(ExtFeatures.ADX)
+	, SHA(ExtFeatures.SHA)
+	, PREFETCHWT1(ExtFeatures.PREFETCHWT1)
+	{
+	}
+
+inline processor_features_info::info_t::info_t(cpu_probe_t const& Probe)
+	:	Version    (Probe.rEAX)
+	,	Model      (Probe.rEBX)
+	,	FeaturesEx (Probe.rECX)
+	,	Features   (Probe.rEDX)
+	{
+	Probe( 7 );
+	}
+
+inline processor_features_info::processor_features_info()
+	:	Info(cpu_probe_t(1))
+	{
+	#if defined(_MSC_VER) || defined(__INTEL_COMPILER) && defined(_WIN32)
+		SYSTEM_INFO SysInfo;
+		::GetSystemInfo(&SysInfo);
+		SysInfo.dwNumberOfProcessors;
+		SysInfo.dwActiveProcessorMask;
+		SysInfo.wProcessorLevel;
+		SysInfo.dwProcessorType;
+		SysInfo.lpMinimumApplicationAddress;
+		SysInfo.lpMaximumApplicationAddress;
+		SysInfo.dwAllocationGranularity;
+		SysInfo.dwPageSize;
+	#elif defined(__GNUC__) || defined(__clang__)
+		long numberOfProcessors = sysconf(_SC_NPROCESSORS_ONLN);
+		long pageSize = sysconf(_SC_PAGESIZE);
+	#endif
+	}
+
+inline const processor_features_info::vendor_id_t processor_features_info::vendor_id(void) const {
+	return cpu_probe_t(0);
+	}
+
+inline const processor_features_info::version_info_t& processor_features_info::version_info(void) const {
+	return Info.Version;
+	}
+
+inline const processor_features_info::model_info_t& processor_features_info::model_info(void) const {
+	return Info.Model;
+	}
+
+inline const processor_features_info::features_info_t& processor_features_info::features_info(void) const {
+	return Info.Features;
+	}
+
+inline const processor_features_info::features_info_ex_t& processor_features_info::features_info_ex(void) const {
+	return Info.FeaturesEx;
+	}
+
+inline const processor_features_info::structured_extended_features_t processor_features_info::structured_extended_features(void) const {
+	cpu_probe_t Probe(0x00000007);
+	return structured_extended_features_t(Probe.rEBX, Probe.rECX, Probe.rEDX);
+}
+
+inline const processor_features_info::cpu_features_t processor_features_info::cpu_features(void) const {
+	return cpu_features_t(Info.Features, Info.FeaturesEx, structured_extended_features());
+}
+
+}//namespace platform
+
+#endif//PROCESSOR_FEATURES_INFO_H
