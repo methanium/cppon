@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/c++on/deprecated
+/c++on-repo.7z
+/Une conversation avec Copilot.txt
+/BENCHMARKS.md
