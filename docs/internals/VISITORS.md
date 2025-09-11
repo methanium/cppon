@@ -11,19 +11,29 @@ This file documents how hierarchical access, dereferencing and autovivification 
 - Distinct read vs write semantics (no accidental autovivification in const access).
 - Thread‑local root stack used to resolve absolute paths and `path_t`.
 
-## Root stack model
+## Root stack and thread-local storage
 
-Thread‑local (`thread_local`) storage:
-- `std::vector<cppon*> stack;` – top is the current root.
-- A per‑thread `Null` sentinel returned by `visitors::null()`.
-
-Invariants:
-- Bottom sentinel `nullptr` inserted once – `get_root()` asserts `top != nullptr`.
-- Each pushed root is unique (push promotes if already deeper).
-- `pop_root(x)` is a no‑op if `x` is not found; safe with temporaries.
-- Lifetime: `cppon::~cppon()` calls `pop_root(*this)`.
+- - `static_storage` holds:
+  - A thread-local root stack (vector<cppon*>), initialized with a bottom sentinel (nullptr)
+  - A per-thread `Null` sentinel returned by `visitors::null()`
+- Invariants:
+  - `hoist_if_found` promotes an existing entry to the top (O(n) worst-case, small n in practice)
+  - The root stack is never empty; `get_root()` asserts top != nullptr
+  - Each pushed root is unique (push promotes if already deeper).
+  - `push_root` enforces uniqueness (no duplicates); `pop_root` removes only if found
+  - `pop_root(x)` is a no‑op if `x` is not found; safe with temporaries.
+  - Lifetime: `cppon::~cppon()` calls `pop_root(*this)`.
 
 ## Dereferencing helpers
+
+Quick summary
+- deref_if_ptr (const/non-const, internal)
+  - pointer_t: returns `*arg` or `null()` if the pointer is null
+  - path_t: resolves against `get_root()`, unconditionally removes the leading '/'
+  - others: passthrough (returns the original object)
+- deref_if_not_null (non-const only, internal)
+  - If the slot holds a null pointer_t, returns the slot itself (autovivify at the slot)
+  - Otherwise delegates to deref_if_ptr
 
 | Helper               | Input kind    | Result                                                                 |
 |----------------------|---------------|------------------------------------------------------------------------|
@@ -80,10 +90,26 @@ Const traversal never creates containers:
 |-----------------|-------------------------------|--------------------------------------|
 | Representation  | Raw pointer into live tree    | Absolute textual path                |
 | Stability       | Invalid if node reallocated   | Stable as long as key/index layout   |
-| Serialization   | Prints as reference marker?*  | Prints as `"$cppon-path:/.../..."`   |
-| Restoration     | `restore_paths(refs)`         | Not needed                           |
+| Serialization   | Emitted as a path token (`$cppon-path:`)| Emitted unchanged as path token |
+| Flatten (option)| Can be inlined when `flatten` enabled | Resolved then possibly re‑emitted as path |
+| Round‑trip      | pointer_t → path_t → pointer_t via resolve_paths/restore_paths |
+| Restoration     | `restore_paths(refs)`         | Not needed |
 
-(* depends on printer options)
+Notes:
+- The printer never writes binary data for pointer_t: it is always converted to a path_t representation.
+- The `flatten` option tries to inline the pointed-to subtree but leaves a path if a cycle is detected.
+
+## Path model and invariants
+
+- `path_t` is always absolute
+  - Must start with `/`; malformed paths throw `invalid_path_error` at construction
+  - The `"_path"` UDL enforces the same rule
+- Root resolution
+  - Strings of the form `"$cppon-path:/.../..."` produce path_t with leading '/'
+  - `"$cppon-path:/"` is valid and resolves to the current root (visitor(obj, "") returns obj)
+- deref behaviors (const vs non-const)
+  - Read-only traversal uses `deref_if_ptr` (no autovivification)
+  - Writable traversal uses `deref_if_not_null` (autovivify containers at the next segment when needed)
 
 ## Null sentinel vs null pointer_t
 

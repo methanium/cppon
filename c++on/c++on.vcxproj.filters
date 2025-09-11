@@ -287,6 +287,27 @@
     <None Include="..\docs\internals\VISITORS.md">
       <Filter>c++on-repo\docs\internals</Filter>
     </None>
+    <None Include="..\docs\BENCHMARKS.md">
+      <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\docs\internals\ALTERNATIVES.md">
+      <Filter>c++on-repo\docs\internals</Filter>
+    </None>
+    <None Include="..\docs\internals\PARSER.md">
+      <Filter>c++on-repo\docs\internals</Filter>
+    </None>
+    <None Include="..\docs\internals\PRINTER.md">
+      <Filter>c++on-repo\docs\internals</Filter>
+    </None>
+    <None Include="..\docs\internals\SCANNER.md">
+      <Filter>c++on-repo\docs\internals</Filter>
+    </None>
+    <None Include="..\docs\internals\TYPES.md">
+      <Filter>c++on-repo\docs\internals</Filter>
+    </None>
+    <None Include="..\docs\internals\REFERENCES.md">
+      <Filter>c++on-repo\docs\internals</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\benchmarks\CMakeLists.txt">

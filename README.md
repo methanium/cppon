@@ -19,7 +19,7 @@ These results are achieved without sacrificing features, making **C++ON** one of
 Its speed follows from a simple design and the effective use of modern C++, prioritizing an intuitive, easy, and pleasant API.
 
 - SIMD runtime dispatch (SSE/AVX2/AVX‑512) accelerates hot scan paths.
-- See docs/PERFORMANCE.md for a summary (Scalar vs SSE vs AVX2) and docs/BENCHMARKS.md for reproduction steps.
+- See [docs/PERFORMANCE.md](./docs/PERFORMANCE.md) for a summary (Scalar vs SSE vs AVX2) and [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for reproduction steps.
 
 ## 🌟 Features
 

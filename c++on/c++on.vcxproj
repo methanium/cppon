@@ -277,6 +277,7 @@
     <None Include="..\docs\ACKNOWLEDGEMENT.md" />
     <None Include="..\docs\API_REFERENCE.md" />
     <None Include="..\docs\BASIC_USAGE.md" />
+    <None Include="..\docs\BENCHMARKS.md" />
     <None Include="..\docs\CHANGELOG.md" />
     <None Include="..\docs\CODE_OF_CONDUCT.md" />
     <None Include="..\docs\CONFIGURATION.md" />
@@ -285,7 +286,13 @@
     <None Include="..\docs\FAQ.md" />
     <None Include="..\docs\GLOSSARY.md" />
     <None Include="..\docs\INDEX.md" />
+    <None Include="..\docs\internals\ALTERNATIVES.md" />
     <None Include="..\docs\internals\INDEX.md" />
+    <None Include="..\docs\internals\PARSER.md" />
+    <None Include="..\docs\internals\PRINTER.md" />
+    <None Include="..\docs\internals\REFERENCES.md" />
+    <None Include="..\docs\internals\SCANNER.md" />
+    <None Include="..\docs\internals\TYPES.md" />
     <None Include="..\docs\internals\VISITORS.md" />
     <None Include="..\docs\INTRODUCTION.md" />
     <None Include="..\docs\LITERALS.md" />
