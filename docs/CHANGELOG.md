@@ -1,32 +1,42 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this project are documented here.
+Format: Inspired by Keep a Changelog (https://keepachangelog.com) and SemVer.
 
-## [0.1.0] - 2025-09-05
-- Initial public release.
-- Header-only C++17 JSON parser with paths, references, typed numbers, blobs.
-- SIMD detection and optional overrides; “Trusted input” mode (opt-in).
-- Documentation kick-off (README, INTRODUCTION, CONFIGURATION, PATHS, Internals).
-
-History note:
-- The first prototype of C++ON dates back to 2019; this marks the first public release.
-- The library has been used internally in various projects since then.
-- The codebase has been refactored and improved over time, leading to this stable release.
-
-## Unreleased
-- Namespace: cppon → ch5
-- Opt-in: CPPON_ENABLE_STD_GET_INJECTION
-- Removed: CPPON_NO_UNSAFE_POINTER_
-- Docs: index + initial stubs (examples/tests/benchmarks)
-
-### Breaking
-- Renamed version_* helpers to cppon_version_* (cppon_version_major/minor/patch/string/hex).
+## [Unreleased]
 
 ### Added
-- invalid_path_error: thrown for malformed path_t (empty or missing leading '/').
+- Internal documentation: `docs/internals/VISITORS.md` (deref semantics, autovivification rules).
+- Opt-in macro: `CPPON_ENABLE_STD_GET_INJECTION` (unqualified std::get / get_if usage).
+- `invalid_path_error` (thrown on malformed `path_t`: empty or missing leading '/').
 
 ### Changed
-- deref_if_ptr: explicit support for "$cppon-path:/" (resolves to root via visitor(obj, "")).
-- path_t: invariant strengthened (always absolute); _path literal reflects the same contract.
-- Internal: clarified deref semantics (visitors::deref_if_ptr / visitors::deref_if_not_null) and absolute path handling.
-- No public API changes.
+- `path_t` invariant strengthened (always absolute); `_path` literal enforces same rule.
+- `deref_if_ptr`: explicit support for `"$cppon-path:/"` (resolves to root).
+- Internal: clarified deref helpers (`deref_if_ptr` / `deref_if_not_null`) and absolute path handling in docs.
+- Documentation: wording, numeric clarification, configuration clarifications.
+- Internals index updated to reference new visitor documentation.
+
+### Fixed
+- Removed a stray empty bullet in documentation.
+- Corrected a mistyped numeric value in docs (no code impact).
+- Fixed broken links in `API_REFERENCE.md` and `LITERALS.md`.
+
+### Removed
+- Obsolete macro reference: `CPPON_NO_UNSAFE_POINTER_` (cleanup in docs).
+
+### Breaking
+- Renamed `version_*` helpers to `cppon_version_*` (`cppon_version_major/minor/patch/string/hex`).
+
+---
+
+## [0.1.0] - 2025-09-11
+### Added
+- Initial public release: header-only C++17 JSON parser with paths, in‑document references, typed numeric extensions, blobs (lazy base64 decode).
+- SIMD detection + runtime overrides (SSE / AVX2 / AVX‑512 when available).
+- “Trusted input” mode (optional, branchless whitespace).
+- Documentation bootstrap: README, INTRODUCTION, CONFIGURATION, PATHS, Internals index, API reference skeleton, examples/tests/benchmarks stubs.
+
+### Notes
+- Prototype origins (internal use) date back to 2019.
+- Codebase refactored progressively to reach this first public drop.

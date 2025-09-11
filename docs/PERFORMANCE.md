@@ -137,4 +137,4 @@ ch5::clear_global_simd_override();
 - MSVC: /O2 /std:c++17 /DCPPON_ENABLE_SIMD=1 [/GL /LTCG] [/arch:AVX2]
 - GCC/Clang: -O3 -std=c++17 -DCPPON_ENABLE_SIMD=1 [-flto] [-march=native]
 
-See PERFORMANCE.md for a SIMD impact summary (SWAR vs SSE vs AVX2).
+See [SIMD_SUPPORT.md](SIMD_SUPPORT.md) for a SIMD impact summary (SWAR vs SSE vs AVX2).

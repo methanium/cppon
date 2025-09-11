@@ -284,6 +284,9 @@
     <None Include="..\README.md">
       <Filter>c++on-repo</Filter>
     </None>
+    <None Include="..\docs\internals\VISITORS.md">
+      <Filter>c++on-repo\docs\internals</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\benchmarks\CMakeLists.txt">

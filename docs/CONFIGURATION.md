@@ -28,13 +28,13 @@ This page lists the main build-time switches and how to enable them per platform
 
 - CPPON_VERSION_MAJOR / MINOR / PATCH / STRING / HEX
   Version info macros; informational only (not configuration).
--
+
 - CPPON_OBJECT_MIN_RESERVE, CPPON_ARRAY_MIN_RESERVE  
   Initial reserve hints for objects/arrays during parsing.
 
 - CPPON_MAX_ARRAY_DELTA  
   Guard against accidental “sparse” arrays during writes. If an indexed write jumps forward by more than this delta from the current size, the operation throws `excessive_array_resize_error`.  
-  Default: `100`. Increase only if you intentionally skip large ranges, otherwise append sequentially.
+  Default: `256`. Increase only if you intentionally skip large ranges, otherwise append sequentially.
 
 - CPPON_PRINTER_RESERVE_PER_ELEMENT  
   Printer’s per‑element reserve hint (replaces the old “initial printer reserve per element” name).
@@ -49,6 +49,7 @@ This page lists the main build-time switches and how to enable them per platform
   - Strings starting with this prefix create a blob_string_t whose value represents a base 64 encoded blob_t.
 
 Notes
+- Prefixes macros must start with '$' and contain only URL-safe characters (alphanumeric, '-', '_', '.', '~').
 - Keep macro definitions consistent across translation units (define before including `<cppon/c++on.h>` or set globally in the build system).
 
 ## Scanner, SIMD, and input contract

@@ -52,6 +52,6 @@ Notes
 - Signatures: string UDLs are defined as `(const char*, size_t)`; `"_blob"` is also `(const char*, size_t)`.
 
 See also
-- BASIC_USAGE.md for a quick tour
-- CONFIGURATION.md for macros (TRUSTED_INPUT, ENABLE_SIMD…)
-- API_REFERENCE.md for the full function list
+- [BASIC_USAGE.md](BASIC_USAGE.md) for a quick tour
+- [CONFIGURATION.md](CONFIGURATION.md) for macros (TRUSTED_INPUT, ENABLE_SIMD…)
+- [API_REFERENCE.md](API_REFERENCE.md) for the full function list

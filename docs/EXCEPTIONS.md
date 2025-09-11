@@ -88,6 +88,6 @@ Where
   - Validate option types in tests; in JSON mode, check 64‑bit integer bounds.
 
 References
-- API: ./API_REFERENCE.md
-- Configuration/macros: ./CONFIGURATION.md
-- Paths/References: ./PATHS.md
+- [API](API_REFERENCE.md): full function and exception list.
+- [Configuration/macros](CONFIGURATION.md): macros affecting behavior.
+- [Paths/References](PATHS.md): usage and exceptions.

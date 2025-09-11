@@ -286,6 +286,7 @@
     <None Include="..\docs\GLOSSARY.md" />
     <None Include="..\docs\INDEX.md" />
     <None Include="..\docs\internals\INDEX.md" />
+    <None Include="..\docs\internals\VISITORS.md" />
     <None Include="..\docs\INTRODUCTION.md" />
     <None Include="..\docs\LITERALS.md" />
     <None Include="..\docs\PATHS.md" />

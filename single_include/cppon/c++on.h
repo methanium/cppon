@@ -127,10 +127,8 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <deque>
 #include <limits>
 #include <ostream>
-#include <stack>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -3115,14 +3113,18 @@ inline void push_root(const cppon& root) {
 		stack.push_back(&const_cast<cppon&>(root));
 }
 
-// Bounded helper to check if a string_view contains only digits
+// Return true if every character is '0'..'9' (empty => false for path segments)
 inline bool all_digits(string_view_t sv) noexcept {
-	return std::all_of(sv.begin(), sv.end(), [](unsigned char c) { return (static_cast<unsigned char>(c - 0x30) <= 9u); });
+	if (sv.empty()) return false;
+	return std::all_of(sv.begin(), sv.end(), [](unsigned char c) {
+		unsigned d = static_cast<unsigned>(c) - static_cast<unsigned>('0');
+		return d <= 9u;
+	});
 }
+
 // Bounded helper to convert a numeric string_view into size_t
 inline size_t parse_index(string_view_t sv) noexcept {
 	size_t idx = 0;
-	// no sign or spaces expected; digits already validated via all_digits()
 	for (char c : sv) {
 		idx = idx * 10 + static_cast<size_t>(c - '0');
 	}
@@ -3243,7 +3245,8 @@ inline const cppon& visitor(const array_t& array, size_t index) noexcept {
 }
 inline cppon& visitor(array_t& array, size_t index) {
 	if (index >= array.size() ) {
-		if (index > array.size()  + max_array_delta)
+		const size_t max_allowed = array.size() + max_array_delta;
+		if (index > max_allowed)
 			throw excessive_array_resize_error();
 		array.resize(index + 1, null());
 	}

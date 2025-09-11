@@ -2,10 +2,10 @@
 
 This page lists the main public types and functions. See the other documents for usage details and design notes.
 
-- Introduction: ./INTRODUCTION.md
-- Configuration: ./CONFIGURATION.md
-- Paths and References: ./PATHS.md
-- Internals: ./internals/INDEX.md
+- [Introduction:](./INTRODUCTION.md)
+- [Configuration:](./CONFIGURATION.md)
+- [Paths and References:](./PATHS.md)
+- [Internals:](./internals/INDEX.md)
 
 ---
 
@@ -19,20 +19,22 @@ All symbols are under the `ch5` namespace.
 
 `cppon` holds a tagged union (variant) of the following alternatives:
 
-- object_t            // associative object as a vector of members
-- array_t             // sequential array of values
-- string_view_t       // non‑owning UTF‑8 view
-- string_t            // owning UTF‑8 string
-- number_t            // lazily converted numeric token
-- boolean_t           // bool
-- nullptr_t           // null
-- path_t              // textual path token: "$cppon-path:/a/b/0"
-- pointer_t           // direct in‑document pointer (see PATHS.md)
-- blob_string_t       // textual Base64 blob: "$cppon-blob:..."
-- blob_t              // realized binary blob
-- numeric concrete types:
-  - float_t, double_t
-  - i8/u8, i16/u16, i32/u32, i64/u64
+| Type               | Description                          |
+|--------------------|--------------------------------------|
+| object_t           | associative object as a vector of me|mbers |
+| array_t            | sequential array of values |
+| string_view_t      | non‑owning UTF‑8 view |
+| string_t           | owning UTF‑8 string |
+| number_t           | lazily converted numeric token |
+| boolean_t          | bool |
+| nullptr_t          | null |
+| path_t             | textual path token: "$cppon-path:/a/b/0" |
+| pointer_t          | direct in‑document pointer (see PATHS.md) |
+| blob_string_t      | textual Base64 blob: "$cppon-blob:..." |
+| blob_t             | realized binary blob |
+| float_t, double_t | |
+| i8/u8, i16/u16 | concrete numeric types |
+| i32/u32, i64/u64 |  |
 
 Notes
 - `number_t` defers numeric parsing; it converts to a concrete numeric type on demand.
@@ -63,7 +65,7 @@ Notes
     - Assignments for all supported alternatives (including pointer_t)
 
 Path resolution
-- Paths starting with '/' are resolved from the active root. Use root_guard to pin a root across a scope; see PATHS.md.
+- Paths starting with '/' are resolved from the active root. Use root_guard to pin a root across a scope; see [PATHS.md](PATHS.md).
 
 ---
 
@@ -84,9 +86,9 @@ Errors
 
 ## Number helpers
 
-- T get_strict(cppon& v) / T get_strict(const cppon& v)
+- ```cppT get_strict(cppon& v)``` / ```cppT get_strict(const cppon& v)```
   - Requires exact numeric type; if `v` holds `number_t` and is non‑const, conversion occurs; otherwise throws.
-- T get_cast(cppon& v) / T get_cast(const cppon& v)
+- ```cppT get_cast(cppon& v)``` / ```cppT get_cast(const cppon& v)```
   - Casts across supported numeric types; converts `number_t` in non‑const; throws on invalid cast.
 
 Notes
@@ -96,8 +98,8 @@ Notes
 
 ## Blobs
 
-- blob_t& get_blob(cppon& v, bool raise = true)
-- const blob_t& get_blob(const cppon& v)
+- ```cppblob_t& get_blob(cppon& v, bool raise = true)```
+- ```cppconst blob_t& get_blob(const cppon& v)```
   - Non‑const: decodes `blob_string_t` to `blob_t` on demand.
   - Const: throws `blob_not_realized_error` if not realized (or if `raise` in non‑const was set true and realization fails).
 
@@ -106,25 +108,34 @@ Notes
 ## Printing
 
 Overloads
-- std::string to_string(const cppon& value, string_view_t options = {})
-- std::string to_string(const cppon& value, const cppon& options)
-- std::string to_string(const cppon& value, reference_vector_t* refs, const cppon& options)
+```cpp
+std::string to_string(const cppon& value, string_view_t options = {});
+std::string to_string(const cppon& value, const cppon& options);
+std::string to_string(const cppon& value, reference_vector_t* refs, const cppon& options);
+```
 
 Streaming
-- printer& operator<<(printer& pr, const cppon& value)
-- std::ostream& operator<<(std::ostream& os, const cppon& value)   // compact output by default
+```cpp
+printer& operator<<(printer& pr, const cppon& value);
+std::ostream& operator<<(std::ostream& os, const cppon& value); // compact output by default
+```
 
 Notes
-- Use to_string_view(...) + stream insertion if you need pretty / JSON layout without an intermediate std::string: std::cout << to_string_view(doc, R"({"layout":{"json":true,"pretty":true}})").
+- Use to_string_view(...) + stream insertion if you need pretty / JSON layout without an intermediate std::string: ```cppstd::cout << to_string_view(doc, R"({"layout":{"json":true,"pretty":true}})")```.
 
 Common options (object form)
-- {"pretty":true}
-- {"compact":true}
-- {"layout":{"json":true}}            // JSON‑compatible output
-- {"layout":{"flatten":true}}         // dereference references where possible
-- Buffer control:
-  - {"buffer":"retain"}
-  - {"buffer":{"reset":true,"reserve":true}}
+```json
+{"pretty":true}
+{"compact":true}
+{"layout":{"json":true}}     // JSON‑compatible output
+{"layout":{"flatten":true}}  // dereference references where possible
+```
+
+Buffer control
+```json
+{"buffer":"retain"}
+{"buffer":{"reset":true,"reserve":true}}
+```
 
 JSON compatibility
 - Enforces double‑precision integer safety range.
@@ -133,29 +144,34 @@ JSON compatibility
 ---
 
 ## Paths and References
-
-- reference_vector_t resolve_paths(cppon& root)   // path_t → pointer_t (in‑place)
-- void restore_paths(const reference_vector_t& refs)
+```cpp
+reference_vector_t resolve_paths(cppon& root);  // path_t → pointer_t (in‑place)
+void restore_paths(const reference_vector_t& refs);
+```
 
 Helpers
-- bool is_pointer_cyclic(pointer_t p)
-- std::string find_object_path(cppon& from, pointer_t object)
+```cpp
+bool is_pointer_cyclic(pointer_t p);
+std::string find_object_path(cppon& from, pointer_t object);
+```
 
 Notes
 - Keep the returned `reference_vector_t` alive while optimized pointers are used (to allow restore).
 - path_t is always absolute (must start with '/'); otherwise invalid_path_error is thrown at construction.
-- "$cppon-path:/" is valid and resolves to the root (visitor(obj, "") returns obj).
-- See PATHS.md for absolute/relative access, root semantics, and best practices.
+- `"$cppon-path:/"` is valid and resolves to the root (visitor(obj, "") returns obj).
+- See [PATHS.md](PATHS.md) for absolute/relative access, root semantics, and best practices.
 
 ---
 
 ## Visitors and root
 
 Root management (thread‑local)
-- struct root_guard {
+```cpp
+struct root_guard {
     explicit root_guard(const cppon& root);
     ~root_guard();
-  };
+};
+```
 
 Note
 - Internal traversal helpers (namespace ch5::visitors) are not part of the public API and may change without notice. See docs/internals/.
@@ -163,13 +179,14 @@ Note
 ---
 
 ## SIMD control (runtime)
-
-- enum class SimdLevel { None, SSE, AVX2, AVX512 }
-- void set_global_simd_override(SimdLevel level)
-- void clear_global_simd_override()
-- void set_thread_simd_override(SimdLevel level)
-- void clear_thread_simd_override()
-- SimdLevel effective_simd_level()
+```cpp
+enum class SimdLevel { None, SSE, AVX2, AVX512 };
+void set_global_simd_override(SimdLevel level);
+void clear_global_simd_override();
+void set_thread_simd_override(SimdLevel level);
+void clear_thread_simd_override();
+SimdLevel effective_simd_level();
+```
 
 Notes
 - Thread override takes precedence over global; clearing the thread override falls back to the global override; if none, auto‑detect applies.
@@ -177,10 +194,13 @@ Notes
 ---
 
 ## Version
-
-- int cppon_version_major(), cppon_version_minor(), cppon_version_patch()
-- const char* cppon_version_string()
-- unsigned cppon_version_hex()              // 0x00MMmmpp
+```cpp
+int cppon_version_major();
+int cppon_version_minor();
+int cppon_version_patch();
+const char* cppon_version_string();
+unsigned cppon_version_hex(); // 0x00MMmmpp
+```
 
 ---
 

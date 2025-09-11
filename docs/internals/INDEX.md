@@ -5,7 +5,7 @@ This section documents implementation details that are not part of the public AP
 ## Visitors and deref semantics
 
 - Overview and rationale, including read vs write flows and autovivification rules:
-  - See ./VISITORS.md
+  - See [VISITORS.md](VISITORS.md))
 
 Quick summary
 - deref_if_ptr (const/non-const, internal)
