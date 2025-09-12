@@ -66,11 +66,23 @@ Used by printer when flattening pointer_t targets.
 
 ## Recommended usage
 
-- Call resolve_paths once after building or parsing a large document if many pointer dereferences occur.
-- Call restore_paths before:
-  - Strict JSON emission
-  - External serialization
-  - Structural mutations that might invalidate addresses
+Typical scenarios:
+1. You want faster repeated printing of pointer-heavy structures (avoid repeated DFS path reconstruction).
+2. You need stable original textual paths (round‑trip path_t ↔ pointer_t ↔ path_t).
+
+Optional printing optimization:
+- The printer does NOT require `Refs` to flatten pointers. It only uses them when:
+  - Flatten=false (emit path tokens) OR
+  - Flatten=true but a cycle forces a path fallback.
+- Without `Refs`, each path token emission performs a DFS via `find_object_path`.
+
+Call `resolve_paths(root)` when:
+- The number of pointer_t nodes is large or frequently re‑serialized.
+- You want deterministic reuse of original path spellings (e.g. after modifications).
+
+Call `restore_paths(refs)` before:
+- External JSON where you prefer explicit textual paths.
+- Transformations that may invalidate pointer targets (structure rewrites).
 
 ## Limitations
 

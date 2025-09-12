@@ -453,7 +453,244 @@ inline cppon& visitor(cppon& object, string_view_t index) {
     }, static_cast<value_t&>(object));
 }
 
+/**
+ * @brief Retrieves the blob data from a cppon object.
+ *
+ * This function attempts to retrieve the blob data from a given cppon object. If the object contains a `blob_string_t`,
+ * it decodes the base64 string into a `blob_t` and updates the cppon object. If the object already contains a `blob_t`,
+ * it simply returns it. If the object contains neither, it throws a `type_mismatch_error`.
+ *
+ * @param value The cppon object from which to retrieve the blob data.
+ * @param raise Whether to raise an exception if base64 decoding fails. If false, returns an empty blob instead.
+ *              Defaults to true.
+ * @return A reference to the blob data contained within the cppon object.
+ *
+ * @exception type_mismatch_error Thrown if the cppon object does not contain a `blob_string_t` or `blob_t`.
+ * @exception invalid_base64_error Thrown if the base64 string is invalid and `raise` is set to true.
+ */
+inline blob_t& get_blob(cppon& value, bool raise = true) {
+    return std::visit([&](auto&& arg) -> blob_t& {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_blob(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_blob(*arg);
+        }
+        else if constexpr (std::is_same_v<type, blob_string_t>) {
+            value = decode_base64(arg, raise);
+            return std::get<blob_t>(value);
+        }
+        else if constexpr (std::is_same_v<type, blob_t>) {
+            return arg;
+        }
+        else {
+            throw type_mismatch_error{};
+        }
+        }, value);
+}
+
+/**
+ * @brief Retrieves a constant reference to blob data from a cppon object.
+ *
+ * This function attempts to retrieve a constant reference to the blob data from a given cppon object.
+ * Unlike the non-const version, this function does not perform any conversion of `blob_string_t` to `blob_t`.
+ * If the object contains a `blob_t`, it returns a reference to it. If the object contains a `blob_string_t`,
+ * it throws a `blob_not_realized_error` since the blob must be decoded first. For all other types, it throws
+ * a `type_mismatch_error`.
+ *
+ * @param value The cppon object from which to retrieve the blob data.
+ * @return A constant reference to the blob data contained within the cppon object.
+ *
+ * @exception type_mismatch_error Thrown if the cppon object does not contain a `blob_t` or `blob_string_t`.
+ * @exception blob_not_realized_error Thrown if the cppon object contains a `blob_string_t` (not yet decoded).
+ */
+inline const blob_t& get_blob(const cppon& value) {
+    return std::visit([&](const auto& arg) -> const blob_t& {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_blob(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_blob(*arg);
+        }
+        else if constexpr (std::is_same_v<type, blob_string_t>) {
+            throw blob_not_realized_error{};
+        }
+        else if constexpr (std::is_same_v<type, blob_t>) {
+            return arg;
+        }
+        else {
+            throw type_mismatch_error{};
+        }
+        }, value);
+}
+
+/**
+ * @brief Retrieves a value of type T from a cppon value, ensuring strict type matching.
+ *
+ * This function attempts to retrieve a value of type T from the cppon variant. If the value is of type
+ * number_t, it first converts it to the appropriate numeric type using convert_to_numeric. If the value
+ * is already of type T, it is returned directly. If the value is of a different type, a type_mismatch_error
+ * is thrown.
+ *
+ * @tparam T The type to retrieve. Must be a numeric type.
+ * @param value The cppon value from which to retrieve the type T value.
+ * @return T The value of type T.
+ *
+ * @throws type_mismatch_error if the value is not of type T or cannot be converted to type T.
+ *
+ * @note This function uses std::visit to handle different types stored in the cppon variant.
+ */
+template<typename T>
+T get_strict(cppon& value) {
+    static_assert(std::is_arithmetic_v<T>, "T must be a numeric type");
+    return std::visit([&](auto&& arg) -> T {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_strict<T>(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_strict<T>(*arg);
+        }
+        else if constexpr (std::is_same_v<type, number_t>) {
+            convert_to_numeric(value);
+            return get_strict<T>(value);
+        }
+        else if constexpr (std::is_same_v<type, T>) {
+            return arg;
+        }
+        else {
+            throw type_mismatch_error{};
+        }
+        }, value);
+}
+
+template<typename T>
+T get_strict(const cppon& value) {
+    static_assert(std::is_arithmetic_v<T>, "T must be a numeric type");
+    return std::visit([&](const auto& arg) -> T {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_strict<T>(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_strict<T>(*arg);
+        }
+        else if constexpr (std::is_same_v<type, number_t>) {
+            throw number_not_converted_error{};
+        }
+        else if constexpr (std::is_same_v<type, T>) {
+            return arg;
+        }
+        else {
+            throw type_mismatch_error{};
+        }
+        }, value);
+}
+
+/**
+ * @brief Retrieves a value of type T from a cppon value, allowing type casting.
+ *
+ * This function attempts to retrieve a value of type T from the cppon variant. If the value is of type
+ * number_t, it first converts it to the appropriate numeric type using convert_to_numeric. If the value
+ * is of a different numeric type, it is cast to type T. If the value is of a non-numeric type, a
+ * type_mismatch_error is thrown.
+ *
+ * @tparam T The type to retrieve. Must be a numeric type.
+ * @param value The cppon value from which to retrieve the type T value.
+ * @return T The value of type T.
+ *
+ * @throws type_mismatch_error if the value is not a numeric type and cannot be cast to type T.
+ *
+ * @note This function uses std::visit to handle different types stored in the cppon variant.
+ */
+template<typename T>
+T get_cast(cppon& value) {
+    static_assert(std::is_arithmetic_v<T>, "T must be a numeric type");
+    return std::visit([&](auto&& arg) -> T {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_cast<T>(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_cast<T>(*arg);
+        }
+        else if constexpr (std::is_same_v<type, number_t>) {
+            convert_to_numeric(value);
+            return get_cast<T>(value);
+        }
+        else if constexpr (std::is_arithmetic_v<type>) {
+            return static_cast<T>(arg);
+        }
+        else {
+            throw type_mismatch_error{};
+        }
+        }, value);
+}
+
+template<typename T>
+T get_cast(const cppon& value) {
+    static_assert(std::is_arithmetic_v<T>, "T must be a numeric type");
+    return std::visit([&](auto&& arg) -> T {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_cast<T>(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_cast<T>(*arg);
+        }
+        else if constexpr (std::is_same_v<type, number_t>) {
+            throw number_not_converted_error{};
+        }
+        else if constexpr (std::is_arithmetic_v<type>) {
+            return static_cast<T>(arg);
+        }
+        else {
+            throw type_mismatch_error{};
+        }
+        }, value);
+}
+
+template<typename T>
+constexpr T* get_optional(cppon& value) noexcept {
+    return std::visit([&](auto&& arg) -> T* {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_optional<T>(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_optional<T>(*arg);
+        }
+        else {
+            return std::get_if<T>(&value);
+        }
+        }, value);
+}
+
+template<typename T>
+constexpr const T* get_optional(const cppon& value) noexcept {
+    return std::visit([&](auto&& arg) -> const T* {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_optional<T>(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_optional<T>(*arg);
+        }
+        else {
+            return std::get_if<T>(&value);
+        }
+        }, value);
+}
+
 } // namespace visitors
+
+using visitors::get_blob;
+using visitors::get_strict;
+using visitors::get_cast;
+using visitors::get_optional;
+
 } // namespace ch5
 
 #endif // CPPON_VISITORS_H

@@ -323,6 +323,8 @@ void run_benchmark(benchmark_options options) {
 	ch5::cppon Obj;
 	std::string Str;
 
+	auto Opt = ch5::eval(R"({"buffer":"reset"})");
+
 	SET_HIGH_PRIORITY();
 
 	// Space for outliers (10 lowest + 10 highest)
@@ -365,7 +367,7 @@ void run_benchmark(benchmark_options options) {
 
 			long long printDelta = 0;
 			if (measure_print) {
-				Str = ch5::to_string(Obj);
+				Str = ch5::to_string(Obj, Opt);
 				auto PrintTime = steady_clock::now();
 				printDelta = duration_cast<nanoseconds>(PrintTime - Stop).count();
 			}

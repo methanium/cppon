@@ -129,9 +129,6 @@
     <ClInclude Include="..\include\cppon\c++on-parser.h">
       <Filter>c++on-repo\include\cppon</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\cppon\c++on-parser_error.h">
-      <Filter>c++on-repo\include\cppon</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\cppon\c++on-printer.h">
       <Filter>c++on-repo\include\cppon</Filter>
     </ClInclude>
@@ -164,6 +161,9 @@
     </ClInclude>
     <ClInclude Include="..\tests\run_test.h">
       <Filter>c++on-repo\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-document.h">
+      <Filter>c++on-repo\include\cppon</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

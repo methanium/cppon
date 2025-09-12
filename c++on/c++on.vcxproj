@@ -253,10 +253,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\cppon\c++on-alternatives.h" />
+    <ClInclude Include="..\include\cppon\c++on-document.h" />
     <ClInclude Include="..\include\cppon\c++on-exceptions.h" />
     <ClInclude Include="..\include\cppon\c++on-literals.h" />
     <ClInclude Include="..\include\cppon\c++on-parser.h" />
-    <ClInclude Include="..\include\cppon\c++on-parser_error.h" />
     <ClInclude Include="..\include\cppon\c++on-printer.h" />
     <ClInclude Include="..\include\cppon\c++on-references.h" />
     <ClInclude Include="..\include\cppon\c++on-scanner.h" />

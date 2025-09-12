@@ -53,7 +53,7 @@ This file covers the `cppon` wrapper around `value_t`, root stack integration, a
 
 ## Null vs empty
 
-- - Sentinel null() used for missing reads (const leaf).
+- Sentinel null() used for missing reads (const leaf).
 - User-facing writes replace null slot with container or value.
 
 ## Assignment templates
@@ -66,7 +66,7 @@ Throws unsafe_pointer_assignment_error if assigning a pointer_t to an object in 
 
 ## Best practices
 
-- - Use `root_guard` when mixing multiple documents in a scope.
+- Use `root_guard` when mixing multiple documents in a scope.
 - Prefer `try_*` helpers to avoid exceptions in tentative probing.
 - Resolve textual paths → pointer_t via resolve_paths for hot loops.
 

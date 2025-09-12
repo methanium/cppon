@@ -6,16 +6,22 @@ Format: Inspired by Keep a Changelog (https://keepachangelog.com) and SemVer.
 ## [Unreleased]
 
 ### Added
-- Internal documentation: `docs/internals/VISITORS.md` (deref semantics, autovivification rules).
+- Internal documentation: `docs/internals/VISITORS.md` + other internals (`ALTERNATIVES.md`, `PARSER.md`, `PRINTER.md`, `SCANNER.md`, `REFERENCES.md`, `TYPES.md`).
 - Opt-in macro: `CPPON_ENABLE_STD_GET_INJECTION` (unqualified std::get / get_if usage).
 - `invalid_path_error` (thrown on malformed `path_t`: empty or missing leading '/').
+- Initial public release: header-only C++17 JSON parser with paths, in‑document references, typed numeric extensions, blobs (lazy base64 decode).
+- Documentation bootstrap: README, INTRODUCTION, CONFIGURATION, PATHS, Internals index, API reference skeleton, examples/tests/benchmarks stubs.
+- “Trusted input” mode (optional, branchless whitespace).
+- SIMD detection + runtime overrides (SSE / AVX2 / AVX‑512 when available).
 
 ### Changed
+- Docs: clarified that flatten mode does not require reference_vector_t; Refs are an optional optimization for pointer path emission.
+- Refactoring of internal sub‑namespaces (no public ABI impact; only direct `namespace ch5` symbols are considered stable).
+- Documentation: wording, numeric clarification, configuration clarifications.
+- Internal: clarified deref helpers (`deref_if_ptr` / `deref_if_not_null`) and absolute path handling in docs.
+- Internals index updated to link new visitor documentation.
 - `path_t` invariant strengthened (always absolute); `_path` literal enforces same rule.
 - `deref_if_ptr`: explicit support for `"$cppon-path:/"` (resolves to root).
-- Internal: clarified deref helpers (`deref_if_ptr` / `deref_if_not_null`) and absolute path handling in docs.
-- Documentation: wording, numeric clarification, configuration clarifications.
-- Internals index updated to reference new visitor documentation.
 
 ### Fixed
 - Removed a stray empty bullet in documentation.
@@ -30,13 +36,7 @@ Format: Inspired by Keep a Changelog (https://keepachangelog.com) and SemVer.
 
 ---
 
-## [0.1.0] - 2025-09-11
-### Added
-- Initial public release: header-only C++17 JSON parser with paths, in‑document references, typed numeric extensions, blobs (lazy base64 decode).
-- SIMD detection + runtime overrides (SSE / AVX2 / AVX‑512 when available).
-- “Trusted input” mode (optional, branchless whitespace).
-- Documentation bootstrap: README, INTRODUCTION, CONFIGURATION, PATHS, Internals index, API reference skeleton, examples/tests/benchmarks stubs.
-
 ### Notes
+
 - Prototype origins (internal use) date back to 2019.
 - Codebase refactored progressively to reach this first public drop.

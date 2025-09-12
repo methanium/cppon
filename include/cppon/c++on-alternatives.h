@@ -19,6 +19,7 @@
 #include <vector>
 #include <tuple>
 #include <variant>
+#include <array>
 #include <cmath>
 
 namespace ch5 {
@@ -159,6 +160,193 @@ using value_t = std::variant<
     blob_t,        // 18
     pointer_t,     // 19
     nullptr_t>;    // 20
+
+/**
+ * @brief Encodes a blob into a base64 string.
+ *
+ * This function encodes a blob into a base64 string using the standard base64 encoding.
+ *
+ * @param Blob The blob to encode.
+ * @return string_t The base64-encoded string.
+ */
+inline auto encode_base64(const blob_t& Blob) -> string_t {
+    constexpr const std::array<char, 64> base64_chars{
+        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+        'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
+        'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/'
+    };
+
+    string_t result;
+    result.reserve((Blob.size() + 2) / 3 * 4);
+    auto scan = Blob.data();
+    auto end = scan + Blob.size();
+
+    while (scan + 2 < end) {
+        uint32_t buffer = (scan[0] << 16) | (scan[1] << 8) | scan[2];
+        result.push_back(base64_chars[(buffer & 0x00FC0000) >> 18]);
+        result.push_back(base64_chars[(buffer & 0x0003F000) >> 12]);
+        result.push_back(base64_chars[(buffer & 0x00000FC0) >> 6]);
+        result.push_back(base64_chars[(buffer & 0x0000003F)]);
+        scan += 3;
+    }
+
+    if (scan < end) {
+        uint32_t buffer = (scan[0] << 16);
+        result.push_back(base64_chars[(buffer & 0x00FC0000) >> 18]);
+        if (scan + 1 < end) {
+            buffer |= (scan[1] << 8);
+            result.push_back(base64_chars[(buffer & 0x0003F000) >> 12]);
+            result.push_back(base64_chars[(buffer & 0x00000FC0) >> 6]);
+            result.push_back('=');
+        } else {
+            result.push_back(base64_chars[(buffer & 0x0003F000) >> 12]);
+            result.push_back('=');
+            result.push_back('=');
+        }
+    }
+    return result;
+}
+
+/**
+ * @brief Decodes a base64 string into a blob.
+ *
+ * This function decodes a base64 string into a blob using the standard base64 decoding.
+ *
+ * @param Text The base64-encoded string to decode.
+ * @param Raise Whether to raise an exception if an invalid character is encountered.
+ * @return blob_t The decoded blob, or an empty blob if invalid and `Raise` is set to false.
+ *
+ * @throws invalid_base64_error if an invalid character is encountered and `Raise` is set to true.
+ */
+inline auto decode_base64(const string_view_t& Text, bool raise = true) -> blob_t {
+    constexpr const std::array<uint8_t, 256> base64_decode_table{
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, // 0-15
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, // 16-31
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 62, 64, 64, 64, 63, // 32-47
+        52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 64, 64, 64, 64, 64, 64, // 48-63
+        64,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, // 64-79
+        15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 64, 64, 64, 64, 64, // 80-95
+        64, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, // 96-111
+        41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 64, 64, 64, 64, 64, // 112-127
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, // 128-143
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, // 144-159
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, // 160-175
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, // 176-191
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, // 192-207
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, // 208-223
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, // 224-239
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64  // 240-255
+    };
+
+    blob_t result;
+    result.reserve((Text.size() + 3) / 4 * 3);
+    auto scan = Text.data();
+    auto end = scan + Text.size();
+
+    while (scan < end) {
+        uint32_t buffer = 0;
+        int padding = 0;
+
+        for (int i = 0; i < 4; ++i) {
+            if (scan < end && *scan != '=') {
+                uint8_t decoded_value = base64_decode_table[static_cast<uint8_t>(*scan)];
+                if (decoded_value == 64) {
+                    if (raise)
+						throw invalid_base64_error{};
+                    else
+                        return blob_t{};
+                }
+                buffer = (buffer << 6) | decoded_value;
+            } else {
+                buffer <<= 6;
+                ++padding;
+            }
+            ++scan;
+        }
+
+        result.push_back((buffer >> 16) & 0xFF);
+        if (padding < 2) {
+            result.push_back((buffer >> 8) & 0xFF);
+        }
+        if (padding < 1) {
+            result.push_back(buffer & 0xFF);
+        }
+    }
+	return result;
+}
+
+/**
+ * @brief Converts a cppon value to its corresponding numeric type based on the specified NumberType.
+ *
+ * This function uses std::visit to handle different types stored in the cppon variant. If the type is
+ * number_t, it converts the string representation of the number to the appropriate numeric type based on
+ * the NumberType enum. If the type is already a numeric type, no conversion is performed. If the type is
+ * neither number_t nor a numeric type, a type_mismatch_error is thrown.
+ *
+ * @param value The cppon value to be converted. This value is modified in place.
+ *
+ * @throws type_mismatch_error if the value is neither number_t nor a numeric type.
+ * @throws std::invalid_argument or std::out_of_range if the conversion functions (e.g., std::strtoll) fail.
+ *
+ * @note The function uses compiler-specific directives (__assume, __builtin_unreachable) to indicate that
+ * certain code paths are unreachable, which can help with optimization and avoiding compiler warnings.
+ */
+inline void convert_to_numeric(value_t& value) {
+    std::visit([&](auto&& arg) {
+        using U = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<U, number_t>) {
+            string_view_t str_value = static_cast<string_view_t>(arg);
+            switch (arg.type) {
+                case NumberType::json_int64:
+                    value = static_cast<int64_t>(std::strtoll(str_value.data(), nullptr, 10));
+                    break;
+                case NumberType::json_double:
+                    value = static_cast<double_t>(std::strtod(str_value.data(), nullptr));
+                    break;
+                case NumberType::cpp_float:
+                    value = static_cast<float_t>(std::strtof(str_value.data(), nullptr));
+                    break;
+                case NumberType::cpp_int8:
+                    value = static_cast<int8_t>(std::strtol(str_value.data(), nullptr, 10));
+                    break;
+                case NumberType::cpp_uint8:
+                    value = static_cast<uint8_t>(std::strtoul(str_value.data(), nullptr, 10));
+                    break;
+                case NumberType::cpp_int16:
+                    value = static_cast<int16_t>(std::strtol(str_value.data(), nullptr, 10));
+                    break;
+                case NumberType::cpp_uint16:
+                    value = static_cast<uint16_t>(std::strtoul(str_value.data(), nullptr, 10));
+                    break;
+                case NumberType::cpp_int32:
+                    value = static_cast<int32_t>(std::strtol(str_value.data(), nullptr, 10));
+                    break;
+                case NumberType::cpp_uint32:
+                    value = static_cast<uint32_t>(std::strtoul(str_value.data(), nullptr, 10));
+                    break;
+                case NumberType::cpp_int64:
+                    value = static_cast<int64_t>(std::strtoll(str_value.data(), nullptr, 10));
+                    break;
+                case NumberType::cpp_uint64:
+                    value = static_cast<uint64_t>(std::strtoull(str_value.data(), nullptr, 10));
+                    break;
+                default:
+                    #if defined(_MSC_VER)
+                        __assume(false);
+                    #elif defined(__GNUC__) || defined(__clang__)
+                        __builtin_unreachable();
+                    #else
+                        std::terminate(); // Fallback for other platforms
+                    #endif
+            }
+        } else if constexpr (std::is_arithmetic_v<U>) {
+            // No-op if it's already a numeric type
+        } else {
+            throw type_mismatch_error{};
+        }
+    }, value);
+}
 
 } // namespace ch5
 

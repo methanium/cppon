@@ -825,7 +825,7 @@ inline void print(printer& Printer, const pointer_t& Pointer) {
 		}	
 	}
 inline void print(printer& Printer, const blob_t& Blob) {
-	print(Printer, blob_string_t{ parser::encode_base64(Blob) });
+	print(Printer, blob_string_t{ encode_base64(Blob) });
 	}
 inline void print(printer& Printer, const cppon& Value) {
 	std::visit([&](auto&& Val) {

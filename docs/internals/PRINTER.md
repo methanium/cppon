@@ -66,13 +66,22 @@ Float formatting:
 
 ## Flatten logic
 
-| Case                               | Printed as                         |
-|------------------------------------|------------------------------------|
-| Flatten=false                      | Path token for pointer_t           |
-| Flatten=true, non-cyclic pointer   | Inline dereferenced subtree        |
-| Flatten=true, cyclic pointer       | Path token (cycle safe)            |
+| Case                                        | Printed as                                  | Needs Refs? |
+|---------------------------------------------|---------------------------------------------|-------------|
+| Flatten = false                             | Path token (`"$cppon-path:/.../..."`)       | Optional (Refs speed up path lookup) |
+| Flatten = true & non‑cyclic pointer_t       | Inlined dereferenced subtree                | No          |
+| Flatten = true & cyclic pointer_t           | Path token (cycle-safe fallback)            | Optional    |
 
-Cycle detection via is_pointer_cyclic(pointer_t).
+Notes:
+- Passing `Refs` (result of `resolve_paths`) is optional.  
+  - Without it, path tokens are reconstructed on demand via `find_object_path(visitors::get_root(), ptr)`.
+  - With it, `get_object_path(*Refs, ptr)` avoids a DFS per pointer and preserves original textual paths if they were present.
+- Flatten never needs `Refs` to inline a subtree; it only dereferences the pointer directly unless a cycle is detected.
+- Cycles: `is_pointer_cyclic(ptr)` triggers the fallback to a path token even under flatten=true.
+
+Performance guidance:
+- Small/medium trees or few pointers: skip `resolve_paths`.
+- Many repeated pointer_t emissions or deep trees: call `auto refs = resolve_paths(root);` then `to_string(root, &refs, opts)` for fewer path recomputations.
 
 ## Preallocation heuristic
 
@@ -96,6 +105,7 @@ Current implementation does NOT escape control characters (future extension). In
 | Missing option type matches    | bad_option_error         |
 | Large integer overflow (compat)| json_compatibility_error |
 | Cyclic pointer flatten attempt | Falls back to path token |
+| Missing Refs (when provided earlier) | N/A (Refs are strictly optional) |
 
 ## Interactions
 

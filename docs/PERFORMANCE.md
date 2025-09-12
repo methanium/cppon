@@ -85,6 +85,13 @@ Results (average throughput)
 | string → object     | ~0.74 GB/s | ~0.90 GB/s| ~0.88 GB/s | SSE ≥ AVX2 (AVX2 downclock window) |
 | object → string     | ~0.92 GB/s | ~1.03 GB/s| ~1.04 GB/s | Printer path + memory bound |
 
+| Phase              | Size (bytes) | Min ms | MB/s (min) | Avg ms | MB/s (avg) |
+|--------------------|-------------:|-------:|-----------:|-------:|-----------:|
+| file→buffer        | 4 757 094    | 2.584  | 1841       | 2.739  | 1737       |
+| buffer→string      | 4 757 094    | 0.988  | 4812       | 1.025  | 4643       |
+| string→object      | 4 757 254    | 5.055  | 941        | 5.546  | 857        |
+| object→string      | 6 336 747    | 5.912  | 1072       | 6.343  | 999        |
+
 Additional observations
 - Memory I/O (buffer → string) reaches ~4.6–5.0 GB/s (near memory bandwidth).
 - “Default/Warmup” can show lower figures due to frequency/thermal jitter; per-level runs are more stable.
