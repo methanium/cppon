@@ -11,9 +11,14 @@ Current version: v0.1.0
 Benchmarks on a 4.7 MB JSON file show impressive speeds¹:
 
 <table style="border-collapse: collapse; border: none;">
-<tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Parsing</strong></td><td style="border: none;">Up to 750 MB/s  (average ~450 MB/s)</td></tr>
-<tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Printing</strong></td><td style="border: none;">Up to 1200 MB/s (average ~750 MB/s)</td></tr>
+<tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Parsing</strong></td><td style="border: none;">Up to ~0.95 GB/s (average ~.86 GB/s)</td></tr>
+<tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Printing</strong></td><td style="border: none;">Up to ~1.29 GB/s (average ~1.18 GB/s)</td></tr>
 </table>
+
+Highlights:
+- SWAR + SSE/AVX2 scan phases reach saturation quickly; parsing then becomes logic‑bound (variant dispatch + small container traversal).
+- Compact emission reaches ~1.2 GB/s without pretty / JSON mode / flatten.
+- AVX2 ≈ SSE here (down‑clock windows + mostly non‑vectorizable post‑scan work).
 
 These results are achieved without sacrificing features, making **C++ON** one of the fastest JSON solutions available.<br>
 Its speed follows from a simple design and the effective use of modern C++, prioritizing an intuitive, easy, and pleasant API.

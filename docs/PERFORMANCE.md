@@ -79,18 +79,34 @@ Setup
 - Mode: quick (lazy numbers), Trusted input: ON
 - Input: ~4.76 MB JSON (7 chunks)
 
-Results (average throughput)
-| Stage               | Scalar avg | SSE avg   | AVX2 avg   | Notes                            |
-|---------------------|------------|-----------|------------|----------------------------------|
-| string → object     | ~0.74 GB/s | ~0.90 GB/s| ~0.88 GB/s | SSE ≥ AVX2 (AVX2 downclock window) |
-| object → string     | ~0.92 GB/s | ~1.03 GB/s| ~1.04 GB/s | Printer path + memory bound |
+## Representative results (quick mode, lazy numbers)
 
-| Phase              | Size (bytes) | Min ms | MB/s (min) | Avg ms | MB/s (avg) |
-|--------------------|-------------:|-------:|-----------:|-------:|-----------:|
-| file→buffer        | 4 757 094    | 2.584  | 1841       | 2.739  | 1737       |
-| buffer→string      | 4 757 094    | 0.988  | 4812       | 1.025  | 4643       |
-| string→object      | 4 757 254    | 5.055  | 941        | 5.546  | 857        |
-| object→string      | 6 336 747    | 5.912  | 1072       | 6.343  | 999        |
+Parsing (string → object), MB/s (input size: 4,757,254 bytes)
+
+| SIMD level | Min (GB/s) | Avg (GB/s) | Notes |
+|------------|-----------:|-----------:|-------|
+| None       | 0.84       | 0.79–0.80  | SWAR baseline |
+| SSE        | 0.89       | 0.84–0.86  | Scan phase gains |
+| AVX2       | 0.95       | 0.86–0.87  | Matches SSE (logic bound) |
+
+Printing (object → string, compact), MB/s (output size: 4,756,834 bytes)
+
+| SIMD level | Min (GB/s) | Avg (GB/s) | Notes |
+|------------|-----------:|-----------:|-------|
+| None       | 1.23       | 1.15–1.16  | Buffer reuse amortized |
+| SSE        | 1.26–1.27  | 1.14–1.15  | Close to scalar |
+| AVX2       | 1.28–1.29  | 1.17–1.19  | Mostly memory bound |
+
+Detailed phase metrics (best AVX2 cycle)
+
+| Phase            | Size (bytes) | Min ms | MB/s (min) | Avg ms | MB/s (avg) |
+|------------------|-------------:|-------:|-----------:|-------:|-----------:|
+| file → buffer    | 4,757,094    | 2.547  | 1,868      | 2.686  | 1,771 |
+| buffer → string  | 4,757,094    | 0.992  | 4,797      | 1.035  | 4,596 |
+| string → object  | 4,757,254    | 5.009  |   950      | 5.485  |   867 |
+| object → string  | 4,756,834    | 3.700  | 1,286      | 4.034  | 1,179 |
+
+(Outliers: 10 lowest / 10 highest removed per phase.)
 
 Additional observations
 - Memory I/O (buffer → string) reaches ~4.6–5.0 GB/s (near memory bandwidth).

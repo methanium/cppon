@@ -323,7 +323,7 @@ void run_benchmark(benchmark_options options) {
 	ch5::cppon Obj;
 	std::string Str;
 
-	auto Opt = ch5::eval(R"({"buffer":"reset"})");
+	auto Opt = ch5::eval(R"({"layout" : {"flatten":false, "compact":true}})");
 
 	SET_HIGH_PRIORITY();
 
