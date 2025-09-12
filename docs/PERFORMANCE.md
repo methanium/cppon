@@ -83,28 +83,30 @@ Setup
 
 Parsing (string → object), MB/s (input size: 4,757,254 bytes)
 
-| SIMD level | Min (GB/s) | Avg (GB/s) | Notes |
-|------------|-----------:|-----------:|-------|
-| None       | 0.84       | 0.79–0.80  | SWAR baseline |
-| SSE        | 0.89       | 0.84–0.86  | Scan phase gains |
-| AVX2       | 0.95       | 0.86–0.87  | Matches SSE (logic bound) |
+| SIMD level | Peak (GB/s) | Avg (GB/s) | Notes |
+|------------|------------:|-----------:|-------|
+| None       | 0.84        | 0.79–0.80  | SWAR baseline |
+| SSE        | 0.89        | 0.84–0.86  | Scan phase gains |
+| AVX2       | 0.95        | 0.86–0.87  | Matches SSE (logic bound) |
 
 Printing (object → string, compact), MB/s (output size: 4,756,834 bytes)
 
-| SIMD level | Min (GB/s) | Avg (GB/s) | Notes |
-|------------|-----------:|-----------:|-------|
-| None       | 1.23       | 1.15–1.16  | Buffer reuse amortized |
-| SSE        | 1.26–1.27  | 1.14–1.15  | Close to scalar |
-| AVX2       | 1.28–1.29  | 1.17–1.19  | Mostly memory bound |
+| SIMD level | Peak (GB/s) | Avg (GB/s) | Notes |
+|------------|------------:|-----------:|-------|
+| None       | 1.23        | 1.15–1.16  | Buffer reuse amortized |
+| SSE        | 1.26–1.27   | 1.14–1.15  | Close to scalar |
+| AVX2       | 1.28–1.29   | 1.17–1.19  | Mostly memory bound |
 
 Detailed phase metrics (best AVX2 cycle)
 
-| Phase            | Size (bytes) | Min ms | MB/s (min) | Avg ms | MB/s (avg) |
-|------------------|-------------:|-------:|-----------:|-------:|-----------:|
-| file → buffer    | 4,757,094    | 2.547  | 1,868      | 2.686  | 1,771 |
-| buffer → string  | 4,757,094    | 0.992  | 4,797      | 1.035  | 4,596 |
-| string → object  | 4,757,254    | 5.009  |   950      | 5.485  |   867 |
-| object → string  | 4,756,834    | 3.700  | 1,286      | 4.034  | 1,179 |
+| Phase            | Size (bytes) | Best ms | MB/s (peak) | Avg ms | MB/s (avg) |
+|------------------|-------------:|--------:|------------:|-------:|-----------:|
+| file → buffer    | 4,757,094    | 2.547   | 1,868       | 2.686  | 1,771 |
+| buffer → string  | 4,757,094    | 0.992   | 4,797       | 1.035  | 4,596 |
+| string → object  | 4,757,254    | 5.009   |   950       | 5.485  |   867 |
+| object → string  | 4,756,834    | 3.700   | 1,286       | 4.034  | 1,179 |
+
+*Peak = best sample after outlier trimming (10 lowest / 10 highest removed).*
 
 (Outliers: 10 lowest / 10 highest removed per phase.)
 

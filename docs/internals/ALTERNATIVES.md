@@ -69,6 +69,14 @@ Ordering is not a stable ABI guarantee. Motivations:
 
 Suffix-less large integer (fits 64-bit) defaults to json_int64.
 
+## Conversion & utility helpers
+
+| Helper | Signature | Role | Notes |
+|--------|-----------|------|-------|
+| convert_to_numeric | void convert_to_numeric(value_t&) | In‑place promotion of a number_t into its concrete numeric alternative | Throws type_mismatch_error if not number_t / numeric |
+| encode_base64 | string_t encode_base64(const blob_t&) | Encode binary blob into base64 textual form | Used by printer when emitting blob_t |
+| decode_base64 | blob_t decode_base64(string_view_t, bool raise=true) | Decode textual base64 into blob_t | If raise=false returns empty blob on invalid input |
+
 ## Invariants
 
 | Invariant                            | Enforced by                   |
@@ -77,6 +85,16 @@ Suffix-less large integer (fits 64-bit) defaults to json_int64.
 | number_t never converted twice      | Replaced in-place on convert  |
 | string_view_t points into input     | Caller ensures lifetime       |
 | pointer_t intra-document only       | User discipline               |
+
+Invariant refinement:
+- After a successful `convert_to_numeric`, a former `number_t` index in the variant is replaced by its concrete numeric alternative; no second conversion occurs.
+- `decode_base64` never mutates in place; mutation (realization) is performed by `get_blob` inside visitors.
+
+## Access helpers
+
+All typed retrieval, lazy number promotion, blob realization and optional lookup helpers live in `visitors`:
+
+See: [VISITORS.md](VISITORS.md) / “Value getters” (get_strict, get_cast, get_blob, get_optional).
 
 ## Error conditions (indirect)
 
@@ -95,5 +113,6 @@ Suffix-less large integer (fits 64-bit) defaults to json_int64.
 ## Extension guidelines
 1. Add new alternative to variant (end preferred).
 2. Provide print(...) overload (printer).
-3. Add traversal semantics if container-like (visitors).
-4. Update docs (this file + API reference).
+3. If container-like: add traversal semantics (visitors).
+4. If it affects dereferencing or realization (like blob or number): update visitors’ getters accordingly.
+5. Update docs (this file + API reference).

@@ -87,11 +87,21 @@ Reject:
 - array_t.reserve(array_min_reserve)
 Used only when materializing (non-parse modes).
 
+## Access helpers
+
+The parser does not expose value access/getter utilities.  
+All typed retrieval, lazy number promotion, blob realization and optional lookup helpers live in `visitors`:
+
+See: [VISITORS.md](VISITORS.md) / “Value getters” (get_strict, get_cast, get_blob, get_optional).
+
+Rationale:
+- Keeps parser focused on syntax + structural materialization.
+- Centralizes indirection (path_t / pointer_t) resolution before transformations.
+
 ## Lazy numeric rationale
 
 - Avoid double strto* cost for unused numeric fields.
 - Allows cheap string forwarding in quick mode.
-- convert_to_numeric promotes in place — no extra allocation.
 
 ## Extension guidelines
 
@@ -104,5 +114,3 @@ To add a new literal form:
 ## Interactions
 
 - SCANNER: SIMD/SWAR quote & digit scanning.
-- VISITORS: Later path dereference (resolve_paths).
-- PRINTER: Depends on whether number_t is converted (strict vs JSON compat).
