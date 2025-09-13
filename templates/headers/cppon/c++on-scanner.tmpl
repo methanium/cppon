@@ -49,10 +49,8 @@ constexpr inline uint64_t gt_byte_mask(uint64_t x, uint8_t n) noexcept { return 
 constexpr inline uint64_t eq_byte_mask(uint64_t x, uint8_t b) noexcept { return zero_byte_mask(x ^ byte_mask(b)); }
 
 // Outside ['0'..'9']
- // même chose que (lt_byte_mask(x, '0') | gt_byte_mask(x, '9')) mais économise une opération (& kHigh)
 constexpr inline uint64_t not_digit_mask(uint64_t x) noexcept {
-    const uint64_t v = x ^ byte_mask('0');
-	return gt_byte_mask(v, 9); // high bit si v > 9 => non-chiffre
+    return (lt_byte_mask(x, '0') | gt_byte_mask(x, '9'));
 }
 
 // Non-space mask (high bit set where byte is NOT a space)
@@ -78,6 +76,18 @@ constexpr inline bool has_byte_less_than(uint64_t x, int8_t n) noexcept { return
 constexpr inline bool has_byte_greater_than(uint64_t x, int8_t n) noexcept { return gt_byte_mask(x, static_cast<uint8_t>(n)) != 0; }
 constexpr inline bool has_byte(uint64_t x, int8_t b) noexcept { return eq_byte_mask(x, static_cast<uint8_t>(b)) != 0; }
 
+constexpr int m64_npos = 8;
+
+inline auto m64_get_first_match(uint64_t Mask) {
+    if (Mask == 0)
+        return m64_npos;
+    #if defined(_MSC_VER)
+    unsigned long tz; _BitScanForward64(&tz, Mask); return static_cast<int>(tz >> 3);
+    #else
+    return static_cast<int>(static_cast<unsigned>(__builtin_ctzll(Mask)) >> 3);
+    #endif
+    }
+
 /**
  * SWAR parallel comparison functions
  */
@@ -97,11 +107,7 @@ inline const char* m64_parallel_digits(std::string_view Text, size_t Ofs, size_t
         uint64_t w = m64_load_aligned(p);
         uint64_t mask = not_digit_mask(w);
         if (mask) {
-            #if defined(_MSC_VER)
-            unsigned long tz; _BitScanForward64(&tz, mask); return p + (tz >> 3);
-            #else
-            return p + (static_cast<unsigned>(__builtin_ctzll(mask)) >> 3);
-            #endif
+            return p + m64_get_first_match(mask);
         }
         p += 8;
     }
@@ -135,11 +141,7 @@ inline const char* m64_parallel_find_quote(std::string_view Text, size_t Ofs, si
         uint64_t w = m64_load_aligned(p);
         uint64_t mask = eq_byte_mask(w, static_cast<uint8_t>('"'));
         if (mask) {
-            #if defined(_MSC_VER)
-            unsigned long tz; _BitScanForward64(&tz, mask); return p + (tz >> 3);
-            #else
-            return p + (static_cast<unsigned>(__builtin_ctzll(mask)) >> 3);
-            #endif
+            return p + m64_get_first_match(mask);
         }
         p += 8;
     }
@@ -177,11 +179,7 @@ inline const char* m64_parallel_skip_spaces(std::string_view Text, size_t Ofs, s
         uint64_t w = m64_load_aligned(p);
         uint64_t mask = not_space_mask(w);
         if (mask) { // Not all spaces
-            #if defined(_MSC_VER)
-            unsigned long tz; _BitScanForward64(&tz, mask); return p + (tz >> 3);
-            #else
-            return p + (static_cast<unsigned>(__builtin_ctzll(mask)) >> 3);
-            #endif
+            return p + m64_get_first_match(mask);
         }
         p += 8;
     }
