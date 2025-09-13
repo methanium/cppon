@@ -14,7 +14,7 @@ TEST(UDL, JsonQuickAndFull) {
     auto& nq = q["/n"];
     auto& nf = f["/n"];
     EXPECT_NO_THROW((void)get_cast<int>(nq));
-    EXPECT_NO_THROW((void)get_strict<int>(f["/n"]));
+    EXPECT_NO_THROW((void)get_strict<int64_t>(f["/n"]));
     EXPECT_EQ(std::get<string_view_t>(q["/s"]), "x");
     EXPECT_EQ(std::get<string_view_t>(f["/s"]), "x");
 }

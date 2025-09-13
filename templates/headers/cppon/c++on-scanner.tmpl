@@ -260,7 +260,7 @@ inline size_t m64_parallel_skip_spaces_pos(std::string_view Text) noexcept {
     namespace scanner {
         // Dynamic detection of SIMD capabilities
         enum class SimdLevel {
-            None,
+            SWAR,
             SSE,
             AVX2,
             AVX512
@@ -295,7 +295,7 @@ inline size_t m64_parallel_skip_spaces_pos(std::string_view Text) noexcept {
                 if (features.AVX512F) return SimdLevel::AVX512;
                 if (features.AVX2)    return SimdLevel::AVX2;
                 if (features.SSE4_2)  return SimdLevel::SSE;
-                return SimdLevel::None;
+                return SimdLevel::SWAR;
                 })();
             inline static thread_local find_quote_fn  p_find_quote = bind_find_quote_pos(MaxSimdLevel);
             inline static thread_local scan_digits_fn p_scan_digits = bind_parallel_digits(MaxSimdLevel);
@@ -333,7 +333,7 @@ inline size_t m64_parallel_skip_spaces_pos(std::string_view Text) noexcept {
             inline SimdLevel current_simd_override() noexcept {
                 if (local_storage::simd_override_thread >= 0) return static_cast<SimdLevel>(local_storage::simd_override_thread);
                 int v = g_simd_override_global.load(std::memory_order_relaxed);
-                return v < 0 ? SimdLevel::None : static_cast<SimdLevel>(v);
+                return v < 0 ? SimdLevel::SWAR : static_cast<SimdLevel>(v);
             }
         }
 
@@ -385,7 +385,7 @@ inline size_t m64_parallel_skip_spaces_pos(std::string_view Text) noexcept {
     namespace ch5 {
     namespace scanner {
         enum class SimdLevel {
-            None,
+            SWAR,
             SSE,
             AVX2,
             AVX512
@@ -406,7 +406,7 @@ inline size_t m64_parallel_skip_spaces_pos(std::string_view Text) noexcept {
     inline void clear_global_simd_override() noexcept {}
     inline void set_thread_simd_override(scanner::SimdLevel) noexcept {}
     inline void clear_thread_simd_override() noexcept {}
-    inline scanner::SimdLevel effective_simd_level() noexcept { return scanner::SimdLevel::None; }
+    inline scanner::SimdLevel effective_simd_level() noexcept { return scanner::SimdLevel::SWAR; }
     }
 #endif
 

@@ -33,7 +33,7 @@ Notes
 ## Build modes
 
 - Opt-in: define CPPON_ENABLE_SIMD (SSE / AVX2 / AVX‑512 dispatched at runtime).
-- Scalar-only: omit CPPON_ENABLE_SIMD. Only SWAR (64-bit word-at-a-time) code is compiled; overrides are no-ops (`effective_simd_level() == None`).
+- Scalar-only: omit CPPON_ENABLE_SIMD. Only SWAR (64-bit word-at-a-time) code is compiled; overrides are no-ops (`effective_simd_level() == SWAR`).
 
 ## Safety and tail handling
 

@@ -125,6 +125,7 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <limits>
 #include <ostream>
 #include <string>
@@ -133,6 +134,7 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -2619,6 +2621,21 @@ public:
         : std::runtime_error{ std::string{"JSON compatibility error: "}.append(detail) } {}
 };
 
+/*EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+ * @section I/O Exceptions
+ *EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE*/
+
+ /**
+  * @brief Exception for file operations errors.
+  */
+class file_operation_error : public std::runtime_error {
+public:
+    explicit file_operation_error(std::string_view filename, std::string_view operation = {})
+        : std::runtime_error{ operation.empty()
+            ? std::string{"file operation error: "}.append(filename)
+            : std::string{"failed to "}.append(operation).append(" file: ").append(filename) } {}
+};
+
 } // namespace ch5
 
 #endif // CPPON_EXCEPTIONS_H
@@ -4139,7 +4156,7 @@ inline size_t m64_parallel_skip_spaces_pos(std::string_view Text) noexcept {
     namespace scanner {
         // Dynamic detection of SIMD capabilities
         enum class SimdLevel {
-            None,
+            SWAR,
             SSE,
             AVX2,
             AVX512
@@ -4174,7 +4191,7 @@ inline size_t m64_parallel_skip_spaces_pos(std::string_view Text) noexcept {
                 if (features.AVX512F) return SimdLevel::AVX512;
                 if (features.AVX2)    return SimdLevel::AVX2;
                 if (features.SSE4_2)  return SimdLevel::SSE;
-                return SimdLevel::None;
+                return SimdLevel::SWAR;
                 })();
             inline static thread_local find_quote_fn  p_find_quote = bind_find_quote_pos(MaxSimdLevel);
             inline static thread_local scan_digits_fn p_scan_digits = bind_parallel_digits(MaxSimdLevel);
@@ -4212,7 +4229,7 @@ inline size_t m64_parallel_skip_spaces_pos(std::string_view Text) noexcept {
             inline SimdLevel current_simd_override() noexcept {
                 if (local_storage::simd_override_thread >= 0) return static_cast<SimdLevel>(local_storage::simd_override_thread);
                 int v = g_simd_override_global.load(std::memory_order_relaxed);
-                return v < 0 ? SimdLevel::None : static_cast<SimdLevel>(v);
+                return v < 0 ? SimdLevel::SWAR : static_cast<SimdLevel>(v);
             }
         }
 
@@ -4264,7 +4281,7 @@ inline size_t m64_parallel_skip_spaces_pos(std::string_view Text) noexcept {
     namespace ch5 {
     namespace scanner {
         enum class SimdLevel {
-            None,
+            SWAR,
             SSE,
             AVX2,
             AVX512
@@ -4285,7 +4302,7 @@ inline size_t m64_parallel_skip_spaces_pos(std::string_view Text) noexcept {
     inline void clear_global_simd_override() noexcept {}
     inline void set_thread_simd_override(scanner::SimdLevel) noexcept {}
     inline void clear_thread_simd_override() noexcept {}
-    inline scanner::SimdLevel effective_simd_level() noexcept { return scanner::SimdLevel::None; }
+    inline scanner::SimdLevel effective_simd_level() noexcept { return scanner::SimdLevel::SWAR; }
     }
 #endif
 
@@ -5957,29 +5974,197 @@ inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, const 
 	return std::string_view{ State.Out };
 	}
 inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, string_view_t Options = {}) {
-	return to_string_view(Object, Refs, eval(Options));
+	cppon Opt; if (!Options.empty()) Opt = eval(Options);
+	return to_string_view(Object, Refs, Opt);
 	}
 inline auto to_string_view(const cppon& Object, const cppon& Options) {
 	return to_string_view(Object, nullptr, Options);
 	}
 inline auto to_string_view(const cppon& Object, string_view_t Options = {}) {
-	return to_string_view(Object, nullptr, eval(Options));
+	cppon Opt; if (!Options.empty()) Opt = eval(Options);
+	return to_string_view(Object, nullptr, Opt);
 	}
 inline auto to_string(const cppon& Object, reference_vector_t* Refs, const cppon& Options) -> std::string {
 	return  std::string{ to_string_view(Object, Refs, Options) };
 }
 inline auto to_string(const cppon& Object, reference_vector_t* Refs, string_view_t Options = {}) {
-	return std::string{ to_string_view(Object, Refs, eval(Options)) };
+	cppon Opt; if (!Options.empty()) Opt = eval(Options);
+	return std::string{ to_string_view(Object, Refs, Opt) };
 	}
 inline auto to_string(const cppon& Object, const cppon& Options) {
 	return std::string{ to_string_view(Object, nullptr, Options) };
 	}
 inline auto to_string(const cppon& Object, string_view_t Options = {}) {
-	return std::string{ to_string_view(Object, nullptr, eval(Options)) };
+	cppon Opt; if (!Options.empty()) Opt = eval(Options);
+	return std::string{ to_string_view(Object, nullptr, Opt) };
 	}
 
 }//namespace ch5
 
 #endif // CPPON_PRINTER_H
+/*
+ * C++ON - High performance C++17 JSON parser with extended features
+ * https://github.com/methanium/cppon
+ *
+ * File: c++on-document.h : CPPON document wrapper
+ *
+ * MIT License
+ * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
+ *
+ * See LICENSE file for complete license details
+ */
+
+
+#ifndef CPPON_DOCUMENT_H
+#define CPPON_DOCUMENT_H
+
+namespace ch5 {
+
+/*
+ * C++ON - document wrapper
+ * Owns the input buffer so that all string_view_t / blob_string_t
+ * produced by parsing remain valid for the lifetime of the document.
+ */
+class document : public cppon {
+    std::string _buffer;
+
+    void eval_and_assign(const options parse_mode) {
+        static_cast<cppon&>(*this) = ch5::eval(_buffer, parse_mode);
+        visitors::push_root(*this);
+    }
+
+public:
+    document() = default;
+
+    // Construct + eval (copies text)
+    explicit document(const char* text, const options opt = Quick) {
+        eval(text, opt);
+    }
+
+    // Construct + eval (take ownership)
+    explicit document(std::string_view text, const options opt = Quick) {
+        eval(text, opt);
+    }
+
+    // Construct + eval (take ownership)
+    explicit document(std::string&& text, const options opt = Quick) {
+        eval(std::move(text), opt);
+    }
+
+    // Non-copyable
+    document(const document&)            = delete;
+    document& operator=(const document&) = delete;
+
+    // Movable
+    document(document&& other) noexcept = default;
+    document& operator=(document&& other) noexcept = default;
+
+    // Access to underlying source
+    bool empty() const noexcept { return _buffer.empty(); }
+    std::string_view source_view() const noexcept { return _buffer; }
+    const std::string& source() const noexcept { return _buffer; }
+
+    document& set_source(std::string_view text) {
+        _buffer.assign(text.begin(), text.end());
+        return *this;
+    }
+    document& set_source(std::string&& text) noexcept {
+        _buffer = std::move(text);
+        return *this;
+    }
+
+    document& eval(const char* text, const options parse_mode = Quick) {
+        set_source(std::string_view{ text });
+		eval_and_assign(parse_mode);
+        return *this;
+    }
+    document& eval(std::string_view text, const options parse_mode = Quick) {
+        set_source(text);
+        eval_and_assign(parse_mode);
+        return *this;
+    }
+    document& eval(std::string&& text, const options parse_mode = Quick) {
+        set_source(std::move(text));
+        eval_and_assign(parse_mode);
+        return *this;
+    }
+
+    // Reset everything (buffer + DOM)
+    document& clear() noexcept {
+        _buffer.clear();
+        static_cast<cppon&>(*this) = cppon{}; // empty object_t
+        return *this;
+    }
+
+    std::string serialize(const cppon& print_options = cppon{}) const {
+        return to_string(*this, print_options);
+	}
+
+    void to_file(const std::string& filename, const cppon& print_options = cppon{}) const {
+        std::ofstream out(filename, std::ios::binary);
+        if (!out) throw file_operation_error(filename, "open");
+
+        auto json = serialize(print_options);
+        out.write(json.data(), static_cast<std::streamsize>(json.size()));
+
+        if (!out) throw file_operation_error(filename, "write to");
+    }
+
+    bool to_file(const std::string& filename, std::string& error, const cppon& print_options = cppon{}) const noexcept {
+        try {
+            to_file(filename, print_options);
+			return true;
+        }
+        catch(const std::exception& e) {
+            error = e.what();
+			return false;
+		}
+    }
+
+    document& reparse(const options parse_mode = Quick) {
+        eval_and_assign(parse_mode);
+        return *this;
+    }
+
+    document & rematerialize(const cppon & print_options = cppon{}, const options parse_mode = Quick) {
+        set_source(std::move(to_string(*this, print_options)));
+        eval_and_assign(parse_mode);
+        return *this;
+    }
+
+    // Load file (throws std::runtime_error on failure)
+    static document from_string(std::string& file, const options opt = Quick) {
+        return document{ std::move(file), opt };
+    }
+
+    // Load file (throws std::runtime_error on failure)
+    static document from_file(const std::string& filename, const options opt = Quick) {
+        std::ifstream in(filename, std::ios::binary);
+        if (!in) throw file_operation_error(filename, "open");
+        in.seekg(0, std::ios::end);
+        std::string buf(static_cast<size_t>(in.tellg()), 0x00);
+        in.seekg(0, std::ios::beg);
+        in.read(buf.data(), static_cast<std::streamsize>(buf.size()));
+        if (!in && !in.eof()) throw file_operation_error(filename, "read from");
+        return document{ std::move(buf), opt };
+    }
+
+    // Load file (noexcept, returns invalid document on failure)
+    static document from_file(const std::string& filename, std::string& error, const options opt = Quick) noexcept {
+        try {
+            return from_file(filename, opt);
+        }
+        catch(const std::exception& e) {
+            error = e.what();
+            document doc; static_cast<cppon&>(doc) = nullptr; // invalid document
+            return doc;
+        }
+    }
+};
+
+} // namespace ch5
+
+#endif // CPPON_DOCUMENT_H
+
 
 #endif // CPPON_H

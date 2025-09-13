@@ -21,20 +21,20 @@ All symbols are under the `ch5` namespace.
 
 | Type               | Description                          |
 |--------------------|--------------------------------------|
-| object_t           | associative object as a vector of me|mbers |
+| object_t           | associative ordered object as vector of (name,value) |
 | array_t            | sequential array of values |
 | string_view_t      | non‑owning UTF‑8 view |
 | string_t           | owning UTF‑8 string |
-| number_t           | lazily converted numeric token |
+| number_t           | lazily convertible numeric token |
 | boolean_t          | bool |
 | nullptr_t          | null |
 | path_t             | textual path token: "$cppon-path:/a/b/0" |
-| pointer_t          | direct in‑document pointer (see PATHS.md) |
+| pointer_t          | direct in‑document pointer (see [PATHS.md](PATHS.md)) |
 | blob_string_t      | textual Base64 blob: "$cppon-blob:..." |
 | blob_t             | realized binary blob |
-| float_t, double_t | |
-| i8/u8, i16/u16 | concrete numeric types |
-| i32/u32, i64/u64 |  |
+| float_t, double_t  | concrete floating types |
+| i8/u8, i16/u16     | concrete integer types |
+| i32/u32, i64/u64   | concrete integer types |
 
 Notes
 - `number_t` defers numeric parsing; it converts to a concrete numeric type on demand.
@@ -62,10 +62,51 @@ Notes
     - const object_t* try_object() const noexcept
   - Utilities
     - bool is_null() const
-    - Assignments for all supported alternatives (including pointer_t)
+    - Assignments for all supported alternatives
 
 Path resolution
 - Paths starting with '/' are resolved from the active root. Use root_guard to pin a root across a scope; see [PATHS.md](PATHS.md).
+
+---
+
+## Document wrapper (owning buffer)
+
+The `document` class wraps a `cppon` and owns the source text buffer so that all `strings` produced during parsing remain valid for its lifetime.
+
+Constructors & Methods
+
+```cpp
+document(); // empty => {}
+explicit document(const char* text, options = Quick);
+explicit document(std::string_view text, options = Quick);
+explicit document(std::string&& text, options = Quick);
+
+bool empty() const noexcept;
+std::string_view source_view() const noexcept;
+const std::string& source() const noexcept;
+document& eval(const char* text, options = Quick);
+document& eval(std::string_view text, options = Quick);
+document& eval(std::string&& text, options = Quick);
+document& reparse(options = Quick);
+document& rematerialize(const cppon& print_opts = cppon{}, options parse_mode = Quick);
+std::string serialize(const cppon& print_opts = cppon{}) const;
+document& clear() noexcept;
+static document from_string(std::string&& text, options = Quick);
+static document from_file(const std::string& filename, options = Quick);
+``` 
+
+Invariants & Note
+
+-  Empty document == `{}` (object_t), never null.
+- `eval(nullptr)` is treated as `eval("{}")` (buffer = "{}").
+- `rematerialize` = serialize + reparse → re‑anchors all views (previous string_view_t values must not be cached across this).
+- `serialize` does not touch the internal buffer (not a stabilization step).
+
+Use cases
+
+- Load text and navigate without copying substrings.
+- Re-anchor views after structural transformations (rematerialize if needed).
+- Fast export (serialize).
 
 ---
 
@@ -74,6 +115,7 @@ Path resolution
 - cppon eval(string_view_t text, options opt = options::eval)
 
 Options (materialization level)
+
 - full  : full evaluation; blobs decoded
 - eval  : full evaluation; blobs kept as blob_string_t
 - quick : lazy numbers; tokens preserved where applicable (fast)
@@ -99,8 +141,8 @@ Notes
 ## Blobs
 
 - ```cppblob_t& get_blob(cppon& v, bool raise = true)```
-- ```cppconst blob_t& get_blob(const cppon& v)```
   - Non‑const: decodes `blob_string_t` to `blob_t` on demand.
+- ```cppconst blob_t& get_blob(const cppon& v)```
   - Const: throws `blob_not_realized_error` if not realized (or if `raise` in non‑const was set true and realization fails).
 
 ---
@@ -121,7 +163,11 @@ std::ostream& operator<<(std::ostream& os, const cppon& value); // compact outpu
 ```
 
 Notes
-- Use to_string_view(...) + stream insertion if you need pretty / JSON layout without an intermediate std::string: ```cppstd::cout << to_string_view(doc, R"({"layout":{"json":true,"pretty":true}})")```.
+- Use to_string_view(...) + stream insertion if you need pretty / JSON layout without an intermediate std::string:
+
+```cpp
+std::cout << to_string_view(doc, R"({"layout":{"json":true,"pretty":true}})")
+```
 
 Common options (object form)
 ```json
@@ -180,7 +226,7 @@ Note
 
 ## SIMD control (runtime)
 ```cpp
-enum class SimdLevel { None, SSE, AVX2, AVX512 };
+enum class SimdLevel { SWAR, SSE, AVX2, AVX512 };
 void set_global_simd_override(SimdLevel level);
 void clear_global_simd_override();
 void set_thread_simd_override(SimdLevel level);

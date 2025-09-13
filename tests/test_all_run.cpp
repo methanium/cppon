@@ -195,9 +195,9 @@ int main() {
         auto v = eval(R"({"b":"$cppon-blob:SGVsbG8="})", options::quick);
         auto& b = v["/b"];
         // get_blob(const) must throw if not realized
-        EXPECT_THROW((void)parser::get_blob(static_cast<const cppon&>(b)), blob_not_realized_error);
+        EXPECT_THROW((void)get_blob(static_cast<const cppon&>(b)), blob_not_realized_error);
         // realization via non-const
-        EXPECT_NO_THROW((void)parser::get_blob(b));
+        EXPECT_NO_THROW((void)get_blob(b));
         }, true);
 
 	std::cout << "\n=== Test printer exceptions and JSON compatibility mode ===\n\n";

@@ -165,6 +165,9 @@
     <ClInclude Include="..\include\cppon\c++on-document.h">
       <Filter>c++on-repo\include\cppon</Filter>
     </ClInclude>
+    <ClInclude Include="..\templates\headers\cppon\c++on-document.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\benchmarks\Catalog.json">
@@ -307,6 +310,9 @@
     </None>
     <None Include="..\docs\internals\REFERENCES.md">
       <Filter>c++on-repo\docs\internals</Filter>
+    </None>
+    <None Include="..\docs\DOCUMENT.md">
+      <Filter>c++on-repo\docs</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

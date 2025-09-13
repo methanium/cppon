@@ -266,6 +266,21 @@ public:
         : std::runtime_error{ std::string{"JSON compatibility error: "}.append(detail) } {}
 };
 
+/*EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+ * @section I/O Exceptions
+ *EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE*/
+
+ /**
+  * @brief Exception for file operations errors.
+  */
+class file_operation_error : public std::runtime_error {
+public:
+    explicit file_operation_error(std::string_view filename, std::string_view operation = {})
+        : std::runtime_error{ operation.empty()
+            ? std::string{"file operation error: "}.append(filename)
+            : std::string{"failed to "}.append(operation).append(" file: ").append(filename) } {}
+};
+
 } // namespace ch5
 
 #endif // CPPON_EXCEPTIONS_H

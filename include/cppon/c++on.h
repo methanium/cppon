@@ -122,5 +122,6 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
 #include "c++on-literals.h"
 #include "c++on-references.h"
 #include "c++on-printer.h"
+#include "c++on-document.h"
 
 #endif // CPPON_H

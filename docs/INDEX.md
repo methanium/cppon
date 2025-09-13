@@ -15,6 +15,7 @@ Welcome to the C++ON documentation. This index routes to all sections.
 - Getting started
   - [Basic usage](./BASIC_USAGE.md)
   - [Paths and references](./PATHS.md)
+  - [Document class](./DOCUMENT.md)
   - [Configuration](./CONFIGURATION.md)
   - [API reference](./API_REFERENCE.md)
   - [Literals](./LITERALS.md)

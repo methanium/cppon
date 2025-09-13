@@ -860,25 +860,29 @@ inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, const 
 	return std::string_view{ State.Out };
 	}
 inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, string_view_t Options = {}) {
-	return to_string_view(Object, Refs, eval(Options));
+	cppon Opt; if (!Options.empty()) Opt = eval(Options);
+	return to_string_view(Object, Refs, Opt);
 	}
 inline auto to_string_view(const cppon& Object, const cppon& Options) {
 	return to_string_view(Object, nullptr, Options);
 	}
 inline auto to_string_view(const cppon& Object, string_view_t Options = {}) {
-	return to_string_view(Object, nullptr, eval(Options));
+	cppon Opt; if (!Options.empty()) Opt = eval(Options);
+	return to_string_view(Object, nullptr, Opt);
 	}
 inline auto to_string(const cppon& Object, reference_vector_t* Refs, const cppon& Options) -> std::string {
 	return  std::string{ to_string_view(Object, Refs, Options) };
 }
 inline auto to_string(const cppon& Object, reference_vector_t* Refs, string_view_t Options = {}) {
-	return std::string{ to_string_view(Object, Refs, eval(Options)) };
+	cppon Opt; if (!Options.empty()) Opt = eval(Options);
+	return std::string{ to_string_view(Object, Refs, Opt) };
 	}
 inline auto to_string(const cppon& Object, const cppon& Options) {
 	return std::string{ to_string_view(Object, nullptr, Options) };
 	}
 inline auto to_string(const cppon& Object, string_view_t Options = {}) {
-	return std::string{ to_string_view(Object, nullptr, eval(Options)) };
+	cppon Opt; if (!Options.empty()) Opt = eval(Options);
+	return std::string{ to_string_view(Object, nullptr, Opt) };
 	}
 
 }//namespace ch5

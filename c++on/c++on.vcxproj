@@ -267,6 +267,7 @@
     <ClInclude Include="..\include\simd\simd_comparisons.h" />
     <ClInclude Include="..\include\utils\string_buffer.h" />
     <ClInclude Include="..\single_include\cppon\c++on.h" />
+    <ClInclude Include="..\templates\headers\cppon\c++on-document.tmpl" />
     <ClInclude Include="..\tests\pch.h" />
     <ClInclude Include="..\tests\run_test.h" />
   </ItemGroup>
@@ -282,6 +283,7 @@
     <None Include="..\docs\CODE_OF_CONDUCT.md" />
     <None Include="..\docs\CONFIGURATION.md" />
     <None Include="..\docs\CONTACT.md" />
+    <None Include="..\docs\DOCUMENT.md" />
     <None Include="..\docs\EXCEPTIONS.md" />
     <None Include="..\docs\FAQ.md" />
     <None Include="..\docs\GLOSSARY.md" />

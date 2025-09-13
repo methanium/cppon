@@ -11,7 +11,7 @@
 - Website: https://github.com/methanium
 
 ## Security
-- Security contact: Security contact: methanium.ch5@gmail.com
+- Security contact: methanium.ch5@gmail.com
 - Responsible disclosure: Please email first; allow 3–5 business days for a response.
 
 ## Commercial / Press
@@ -22,7 +22,7 @@
 - SLA: Non-contractual / community support
 
 ## Community
-- (Add later if you open a Discord / Matrix / etc.)
+- (None)
 
 ## Postal
 - (Not published)

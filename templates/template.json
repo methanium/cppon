@@ -49,6 +49,7 @@
     "REFERENCES": "c++on-references.tmpl",
     "PRINTER": "c++on-printer.tmpl",
     "LITERALS": "c++on-literals.tmpl",
+    "DOCUMENT": "c++on-document.tmpl",
     "PROCESSOR_FEATURES_INFO": "processor_features_info.tmpl",
     "SIMD_COMPARISONS": "simd_comparisons.tmpl",
     "CPPON": "c++on.tmpl"

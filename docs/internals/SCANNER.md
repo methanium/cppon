@@ -88,13 +88,13 @@ Define CPPON_ENABLE_SIMD to include all SIMD code to the build:
 Do not define CPPON_ENABLE_SIMD to exclude all SIMD code from the build:
 
 - SIMD headers are not included; only scalar paths are compiled.
-- Overrides become no‑ops; effective_simd_level() returns None.
+- Overrides become no‑ops; effective_simd_level() returns SWAR.
 
 ## SIMD dispatch
 
 | Level    | Functions bound                       |
 |----------|---------------------------------------|
-| None     | SWAR m64_* implementations            |
+| SWAR     | SWAR m64_* implementations            |
 | SSE      | xmm versions (quote/digit)            |
 | AVX2     | ymm versions                          |
 | AVX512   | zmm versions (if supported)           |
@@ -108,7 +108,7 @@ Binding:
 API (public):
 
 ```cpp
-// No-ops in NO_SIMD builds; effective_simd_level() returns None there
+// No-ops in NO_SIMD builds; effective_simd_level() returns SWAR there
 
 void set_global_simd_override(ch5::scanner::SimdLevel) noexcept;
 void clear_global_simd_override() noexcept;
@@ -120,7 +120,7 @@ ch5::scanner::SimdLevel effective_simd_level() noexcept;
 ```
 
 No-SIMD build:
-- Stubs keep API stable, always return SimdLevel::None.
+- Stubs keep API stable, always return SimdLevel::SWAR.
 
 ## Safety
 | Concern             | Mitigation                          |

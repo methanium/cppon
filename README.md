@@ -23,14 +23,15 @@ Highlights:
 These results are achieved without sacrificing features, making **C++ON** one of the fastest JSON solutions available.<br>
 Its speed follows from a simple design and the effective use of modern C++, prioritizing an intuitive, easy, and pleasant API.
 
-- SIMD runtime dispatch (SSE/AVX2/AVX‑512) accelerates hot scan paths.
-- See [docs/PERFORMANCE.md](./docs/PERFORMANCE.md) for a summary (Scalar vs SSE vs AVX2) and [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for reproduction steps.
+- SIMD runtime dispatch (SWAR/SSE/AVX2/AVX‑512) accelerates hot scan paths.
+- See [docs/PERFORMANCE.md](./docs/PERFORMANCE.md) for a summary (SWAR vs SSE vs AVX2) and [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for reproduction steps.
 
 ## 🌟 Features
 
 <table style="border-collapse: collapse; border: none;">
 <tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;C++17</strong></td><td style="border: none;">Clean, modern API leveraging std::variant and string_view</td></tr>
 <tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Header-only</strong></td><td style="border: none;">Simple integration without external dependencies</td></tr>
+<tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Document wrapper</strong></td><td style="border: none;">High-level <code>document</code> class for complete lifecycle management</td></tr>
 <tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Extended types</strong></td><td style="border: none;">Typed numbers with C++ suffixes (i8, u16, …)</td></tr>
 <tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Binary blobs</strong></td><td style="border: none;">Built‑in base64 encode/decode, realized on demand</td></tr>
 <tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Compatibility</strong></td><td style="border: none;">Standards‑compliant JSON output mode</td></tr>
@@ -153,6 +154,42 @@ image["format"] = "png";
 
 // Store raw bytes; printing auto-encodes to base64
 image["data"] = ch5::blob_t{/* binary data */};
+```
+
+### Document Lifecycle & File I/O
+
+```cpp
+using namespace ch5;
+
+// Load from a file
+auto doc = document::from_file("config.json");
+
+// Access content with the same API as cppon
+auto server = doc["/server/host"];
+auto port = get_cast<int>(doc["/server/port"]);
+
+// Modify content
+doc["/server/timeout"] = 60.0;
+
+// Serialize to string with formatting options
+std::string json = doc.serialize(R"({"pretty":true})");
+
+// Save to file
+doc.to_file("updated_config.json");
+
+// Error handling variant that doesn't throw
+std::string error;
+if (!doc.to_file("readonly/config.json", error)) {
+	std::cerr << "Failed to save: " << error << std::endl;
+}
+
+// Create new document and populate
+document new_doc;
+new_doc["/application/name"] = "MyApp";
+new_doc["/application/version"] = "1.0.0";
+
+// Evaluate JSON string
+new_doc.eval(R"({"settings":{"theme":"dark"}})");
 ```
 
 ## ⚙️ Configuration Macros

@@ -6,7 +6,8 @@ Format: Inspired by Keep a Changelog (https://keepachangelog.com) and SemVer.
 ## [Unreleased]
 
 ### Added
-- Internal documentation: `docs/internals/VISITORS.md` + other internals (`ALTERNATIVES.md`, `PARSER.md`, `PRINTER.md`, `SCANNER.md`, `REFERENCES.md`, `TYPES.md`).
+- `document` class: High-level wrapper that owns the input buffer, ensuring string_view/blob_string_t validity. Provides lifecycle management, file I/O (`from_file`, `to_file`), and serialization methods. Extends ABI without affecting existing code.
+- `file_operation_error` exception to support file I/O operations with clear error messages.- Internal documentation: `docs/internals/VISITORS.md` + other internals (`ALTERNATIVES.md`, `PARSER.md`, `PRINTER.md`, `SCANNER.md`, `REFERENCES.md`, `TYPES.md`).
 - Opt-in macro: `CPPON_ENABLE_STD_GET_INJECTION` (unqualified std::get / get_if usage).
 - `invalid_path_error` (thrown on malformed `path_t`: empty or missing leading '/').
 - Initial public release: header-only C++17 JSON parser with paths, in‑document references, typed numeric extensions, blobs (lazy base64 decode).

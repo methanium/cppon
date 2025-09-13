@@ -15,16 +15,16 @@ TEST(CPPON_Parse, ParsesString) {
 
 TEST(CPPON_Base64, EncodeDecodeRoundtrip) {
     blob_t b{ 'M','a','n' };
-    auto s = parser::encode_base64(b);
+    auto s = encode_base64(b);
     EXPECT_EQ(s, "TWFu");
-    auto r = parser::decode_base64("TWFu");
+    auto r = decode_base64("TWFu");
     ASSERT_EQ(r.size(), 3u);
     EXPECT_EQ(r[0], 'M'); EXPECT_EQ(r[1], 'a'); EXPECT_EQ(r[2], 'n');
 }
 
 TEST(CPPON_Base64, DecodeInvalidRaises) {
-    EXPECT_THROW((void)parser::decode_base64("@@@", true), invalid_base64_error);
-    auto r = parser::decode_base64("@@@", false);
+    EXPECT_THROW((void)decode_base64("@@@", true), invalid_base64_error);
+    auto r = decode_base64("@@@", false);
     EXPECT_TRUE(r.empty());
 }
 
@@ -60,8 +60,8 @@ TEST(SIMD_Override, GlobalIsCappedToCPU) {
     auto eff = effective_simd_level();
     clear_global_simd_override();
     // On AVX2 CPUs, eff should be AVX2; on AVX-512 CPUs it may be AVX-512.
-    // Minimal assertion: it must not be SimdLevel::None.
-    EXPECT_NE(eff, SimdLevel::None);
+    // Minimal assertion: it must not be SimdLevel::SWAR.
+    EXPECT_NE(eff, SimdLevel::SWAR);
 }
 
 TEST(SIMD_Override, ThreadOverridesGlobal) {
@@ -238,7 +238,7 @@ TEST(JSON_NumberEOT, NoSimdAcceptsSentinel) {
 #if CPPON_USE_SIMD
     using namespace std::string_view_literals;
     // Force strict SWAR fallback (reads sentinel byte via <= end)
-    set_global_simd_override(SimdLevel::None);
+    set_global_simd_override(SimdLevel::SWAR);
     EXPECT_NO_THROW((void)eval("123"sv));
     clear_global_simd_override();
 #else

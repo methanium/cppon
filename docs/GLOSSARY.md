@@ -46,7 +46,7 @@
   Parsing/evaluation mode: full (decode blobs), eval (keep blob_string_t), quick (lazy numbers), parse (validation only).
 
 - SimdLevel
-  Runtime SIMD level: None, SSE, AVX2, AVX512. Auto‑detected, can be overridden (globally or per thread).
+  Runtime SIMD level: SWAR, SSE, AVX2, AVX512. Auto‑detected, can be overridden (globally or per thread).
 
 - root_guard
   RAII helper to pin a specific cppon as the active root within a scope (root stack is thread‑local).
@@ -67,7 +67,7 @@
   Build‑time macro (CPPON_TRUSTED_INPUT) making whitespace detection branchless by accepting ASCII controls [0x01..0x20] as whitespace (except '\0'). Faster, more permissive than strict JSON.
 
 - CPPON_NO_SIMD
-  Build‑time macro that excludes all SIMD code (scalar only). Overrides become no‑ops; effective SIMD level is None.
+  Build‑time macro that excludes all SIMD code (scalar only). Overrides become no‑ops; effective SIMD level is SWAR.
 
 - CPPON_PATH_PREFIX / CPPON_BLOB_PREFIX
   Build‑time prefixes for path and blob tokens ("$cppon-path:", "$cppon-blob:").

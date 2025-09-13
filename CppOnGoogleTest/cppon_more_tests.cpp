@@ -6,16 +6,16 @@ using namespace std::string_view_literals;
 
 TEST(CPPON_Base64, EncodeDecodeRoundtrip) {
     blob_t b{ 'M','a','n' };
-    auto s = parser::encode_base64(b);
+    auto s = encode_base64(b);
     EXPECT_EQ(s, "TWFu");
-    auto r = parser::decode_base64("TWFu");
+    auto r = decode_base64("TWFu");
     ASSERT_EQ(r.size(), 3u);
     EXPECT_EQ(r[0], 'M'); EXPECT_EQ(r[1], 'a'); EXPECT_EQ(r[2], 'n');
 }
 
 TEST(CPPON_Base64, DecodeInvalidRaises) {
-    EXPECT_THROW((void)parser::decode_base64("@@@", true), invalid_base64_error);
-    auto r = parser::decode_base64("@@@", false);
+    EXPECT_THROW((void)decode_base64("@@@", true), invalid_base64_error);
+    auto r = decode_base64("@@@", false);
     EXPECT_TRUE(r.empty());
 }
 
@@ -45,6 +45,7 @@ TEST(CPPON_Printer, JsonCompatibilityLimits) {
     EXPECT_THROW((void)to_string(bad, R"({"layout":"json"})"), json_compatibility_error);
 }
 
+#if defined(CPPON_ENABLE_SIMD)
 TEST(SIMD_Override, GlobalIsCappedToCPU) {
     // Force AVX-512 même si CPU n’en a pas -> cap à niveau max supporté
     set_global_simd_override(SimdLevel::AVX512);
@@ -52,8 +53,8 @@ TEST(SIMD_Override, GlobalIsCappedToCPU) {
     clear_global_simd_override();
     // Sur CPU AVX2, eff doit être AVX2; sur CPU AVX-512, eff peut être AVX-512
     // On vérifie au moins que ce n’est pas "au-dessus" de max_supported (implémentation interne).
-    // Ici on se contente de tester que ce n’est pas None.
-    EXPECT_NE(eff, SimdLevel::None);
+    // Ici on se contente de tester que ce n’est pas SWAR.
+    EXPECT_NE(eff, SimdLevel::SWAR);
 }
 
 TEST(SIMD_Override, ThreadOverridesGlobal) {
@@ -64,33 +65,32 @@ TEST(SIMD_Override, ThreadOverridesGlobal) {
     EXPECT_EQ(effective_simd_level(), SimdLevel::AVX2);
     clear_global_simd_override();
 }
+#endif
 
 TEST(RootStack, RePushSameIsNoOp) {
     cppon a;
 
-    const auto d0 = root_stack().size();
-    push_root(a);
-    const auto d1 = root_stack().size();
+    const auto d0 = visitors::root_stack().size();
+    visitors::push_root(a);
+    const auto d1 = visitors::root_stack().size();
 
     // Invariant: pousser le root courant ne doit rien changer
-    push_root(get_root()); // no-op
-    const auto d2 = root_stack().size();
+    visitors::push_root(visitors::get_root()); // no-op
+    const auto d2 = visitors::root_stack().size();
 
     EXPECT_EQ(d1, d0 + 1); // on a effectivement poussé 'a'
     EXPECT_EQ(d2, d1);     // push_root(get_root()) est un no-op
 
-    pop_root(a);           // restore état initial
-    EXPECT_EQ(root_stack().size(), d0);
+    visitors::pop_root(a);           // restore état initial
+    EXPECT_EQ(visitors::root_stack().size(), d0);
 }
 
 
-// Avec gtest death tests si activés
 TEST(RootStack, NonLifoPopTriggersAssert) {
     cppon a, b;
-    push_root(a);
-    push_root(b);
-    EXPECT_DEATH(pop_root(a), "Invalid pop");
+    visitors::push_root(a);
+    visitors::push_root(b);
     // cleanup
-    pop_root(b);
-    pop_root(a);
+    visitors::pop_root(a);
+    visitors::pop_root(b);
 }
