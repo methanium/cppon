@@ -280,7 +280,7 @@ static void print_compile_arch() {
 void print_simd_level_with_requested(const char* requested) {
 	std::cout << "Requested: " << requested << "\n";
 	switch (ch5::effective_simd_level()) {
-	case ch5::SimdLevel::SWAR:  std::cout << "Effective: SWAR\n\n"; break;
+	case ch5::SimdLevel::None:  std::cout << "Effective: None\n\n"; break;
 	case ch5::SimdLevel::SSE:   std::cout << "Effective: SSE\n\n"; break;
 	case ch5::SimdLevel::AVX2:  std::cout << "Effective: AVX2\n\n"; break;
 	case ch5::SimdLevel::AVX512:std::cout << "Effective: AVX-512\n\n"; break;
@@ -502,7 +502,7 @@ int main()
 
 	#if defined(CPPON_ONLY_SCALAR_TESTS)
 	// Force scalar
-	set_thread_simd_override(SimdLevel::SWAR);
+	set_thread_simd_override(SimdLevel::None);
 	print_simd_level_with_requested("Force scalar");
 	#endif
 
@@ -518,7 +518,7 @@ int main()
 
 	#ifndef CPPON_ENABLE_SIMD
 	std::cout << "\nSwitch to Scalar: " << "\n";
-	print_simd_level_with_requested("SWAR");
+	print_simd_level_with_requested("None");
 
 	run_benchmark(bench_options);
 
@@ -539,8 +539,8 @@ int main()
 	#endif
 	while(numIterations--) {
 		std::cout << "\nSwitch to Scalar: " << "\n";
-		set_global_simd_override(SimdLevel::SWAR);
-		print_simd_level_with_requested("SWAR");
+		set_global_simd_override(SimdLevel::None);
+		print_simd_level_with_requested("None");
 		run_benchmark(bench_options);
 
 		std::cout << "\nSwitch to SSE: " << "\n";

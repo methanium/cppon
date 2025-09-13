@@ -53,8 +53,8 @@ TEST(SIMD_Override, GlobalIsCappedToCPU) {
     clear_global_simd_override();
     // Sur CPU AVX2, eff doit être AVX2; sur CPU AVX-512, eff peut être AVX-512
     // On vérifie au moins que ce n’est pas "au-dessus" de max_supported (implémentation interne).
-    // Ici on se contente de tester que ce n’est pas SWAR.
-    EXPECT_NE(eff, SimdLevel::SWAR);
+    // Ici on se contente de tester que ce n’est pas None.
+    EXPECT_NE(eff, SimdLevel::None);
 }
 
 TEST(SIMD_Override, ThreadOverridesGlobal) {

@@ -18,7 +18,7 @@ Yes, optionally (compile-time opt-in + runtime detection: SSE / AVX2 / AVX‑512
 - set_thread_simd_override(...), clear_thread_simd_override()
 - effective_simd_level()
 
-Scalar build: do not define `CPPON_ENABLE_SIMD` (SIMD code excluded; overrides become no‑ops; effective level = SWAR).
+Scalar build: do not define `CPPON_ENABLE_SIMD` (SIMD code excluded; overrides become no‑ops; effective level = None).
 
 ## What is “Trusted input”?
 `CPPON_TRUSTED_INPUT` makes whitespace detection branchless by treating ASCII control bytes [0x01..0x20] as whitespace (`'\0'` is never whitespace). Faster on “spaced” JSON; more permissive than strict JSON. Enable only for controlled inputs. See CONFIGURATION.

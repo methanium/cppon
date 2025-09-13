@@ -10,17 +10,17 @@ int main() {
     return -1;
 #endif
 
-    run("NO_SIMD: effective level is SWAR", [] {
-        if (effective_simd_level() != scanner::SimdLevel::SWAR)
-            throw std::runtime_error("effective_simd_level() != SWAR");
+    run("NO_SIMD: effective level is None", [] {
+        if (effective_simd_level() != scanner::SimdLevel::None)
+            throw std::runtime_error("effective_simd_level() != None");
         }, true);
 
     run("NO_SIMD: overrides are no-op", [] {
         set_global_simd_override(scanner::SimdLevel::AVX2);
-        if (effective_simd_level() != scanner::SimdLevel::SWAR)
+        if (effective_simd_level() != scanner::SimdLevel::None)
             throw std::runtime_error("global override changed level");
         set_thread_simd_override(scanner::SimdLevel::SSE);
-        if (effective_simd_level() != scanner::SimdLevel::SWAR)
+        if (effective_simd_level() != scanner::SimdLevel::None)
             throw std::runtime_error("thread override changed level");
         clear_thread_simd_override();
         clear_global_simd_override();

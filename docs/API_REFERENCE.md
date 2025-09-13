@@ -226,7 +226,7 @@ Note
 
 ## SIMD control (runtime)
 ```cpp
-enum class SimdLevel { SWAR, SSE, AVX2, AVX512 };
+enum class SimdLevel { None, SSE, AVX2, AVX512 };
 void set_global_simd_override(SimdLevel level);
 void clear_global_simd_override();
 void set_thread_simd_override(SimdLevel level);

@@ -18,7 +18,7 @@ Tip (MSVC Release):
 
 ## Methodology
 
-- Runtime SIMD selection; we also force levels to SWAR/SSE/AVX2/(AVX‑512 if supported) for comparison.
+- Runtime SIMD selection; we also force levels to None/SSE/AVX2/(AVX‑512 if supported) for comparison.
 - Eval modes:
   - parse (validation only)
   - quick (lazy numbers)
@@ -51,13 +51,13 @@ We present:
 Dataset: <name/size>, Trusted input: <ON/OFF>, Compile-time ISA: <...>
 
 Parsing (string → object), MB/s
-- SWAR:   min <...> | med <...> | avg <...> | p95 <...>
+- None:   min <...> | med <...> | avg <...> | p95 <...>
 - SSE:    min <...> | med <...> | avg <...> | p95 <...>
 - AVX2:   min <...> | med <...> | avg <...> | p95 <...>
 - AVX-512 (if available):   min <...> | med <...> | avg <...> | p95 <...>
 
 Printing (object → string, compact), MB/s
-- SWAR:   min <...> | med <...> | avg <...> | p95 <...>
+- None:   min <...> | med <...> | avg <...> | p95 <...>
 - SSE:    min <...> | med <...> | avg <...> | p95 <...>
 - AVX2:   min <...> | med <...> | avg <...> | p95 <...>
 
@@ -85,7 +85,7 @@ Parsing (string → object), MB/s (input size: 4,757,254 bytes)
 
 | SIMD level | Peak (GB/s) | Avg (GB/s) | Notes |
 |------------|------------:|-----------:|-------|
-| SWAR       | 0.84        | 0.79–0.80  | SWAR baseline |
+| None       | 0.84        | 0.79–0.80  | SWAR baseline |
 | SSE        | 0.89        | 0.84–0.86  | Scan phase gains |
 | AVX2       | 0.95        | 0.86–0.87  | Matches SSE (logic bound) |
 
@@ -93,7 +93,7 @@ Printing (object → string, compact), MB/s (output size: 4,756,834 bytes)
 
 | SIMD level | Peak (GB/s) | Avg (GB/s) | Notes |
 |------------|------------:|-----------:|-------|
-| SWAR       | 1.23        | 1.15–1.16  | Buffer reuse amortized |
+| None       | 1.23        | 1.15–1.16  | Buffer reuse amortized |
 | SSE        | 1.26–1.27   | 1.14–1.15  | Close to scalar |
 | AVX2       | 1.28–1.29   | 1.17–1.19  | Mostly memory bound |
 
@@ -123,7 +123,7 @@ How to reproduce
 - At runtime, exercise overrides to lock a level:
 
 ```cpp
-ch5::set_global_simd_override(ch5::SimdLevel::AVX2); // or SSE, SWAR
+ch5::set_global_simd_override(ch5::SimdLevel::AVX2); // or SSE, None
 auto eff = ch5::effective_simd_level(); // check effective level
 // run benchmark
 ch5::clear_global_simd_override();
@@ -146,7 +146,7 @@ This page outlines how to run and interpret C++ON micro‑benchmarks.
 - Runtime overrides for diagnostics:
 
 ```cpp
-ch5::set_global_simd_override(ch5::SimdLevel::AVX2); // or SSE, SWAR
+ch5::set_global_simd_override(ch5::SimdLevel::AVX2); // or SSE, None
 auto eff = ch5::effective_simd_level(); // check effective level
 // run benchmark
 ch5::clear_global_simd_override();

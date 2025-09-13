@@ -23,7 +23,7 @@ Highlights:
 These results are achieved without sacrificing features, making **C++ON** one of the fastest JSON solutions available.<br>
 Its speed follows from a simple design and the effective use of modern C++, prioritizing an intuitive, easy, and pleasant API.
 
-- SIMD runtime dispatch (SWAR/SSE/AVX2/AVX‑512) accelerates hot scan paths.
+- SIMD runtime dispatch (None/SSE/AVX2/AVX‑512) accelerates hot scan paths.
 - See [docs/PERFORMANCE.md](./docs/PERFORMANCE.md) for a summary (SWAR vs SSE vs AVX2) and [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for reproduction steps.
 
 ## 🌟 Features

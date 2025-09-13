@@ -54,7 +54,7 @@ This section documents implementation details that are not part of the public AP
 - Cycle detection for safe flatten
 
 ### SIMD runtime (see SCANNER)
-- Levels: SWAR / SSE / AVX2 / AVX512
+- Levels: None / SSE / AVX2 / AVX512
 - Overrides: thread > global > auto-detect
 - Capped to CPU support
 

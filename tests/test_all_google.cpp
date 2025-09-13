@@ -60,8 +60,8 @@ TEST(SIMD_Override, GlobalIsCappedToCPU) {
     auto eff = effective_simd_level();
     clear_global_simd_override();
     // On AVX2 CPUs, eff should be AVX2; on AVX-512 CPUs it may be AVX-512.
-    // Minimal assertion: it must not be SimdLevel::SWAR.
-    EXPECT_NE(eff, SimdLevel::SWAR);
+    // Minimal assertion: it must not be SimdLevel::None.
+    EXPECT_NE(eff, SimdLevel::None);
 }
 
 TEST(SIMD_Override, ThreadOverridesGlobal) {
@@ -237,8 +237,8 @@ TEST(JSON_NumberEOT, SimdAcceptsSentinel) {
 TEST(JSON_NumberEOT, NoSimdAcceptsSentinel) {
 #if CPPON_USE_SIMD
     using namespace std::string_view_literals;
-    // Force strict SWAR fallback (reads sentinel byte via <= end)
-    set_global_simd_override(SimdLevel::SWAR);
+    // Force strict None fallback (reads sentinel byte via <= end)
+    set_global_simd_override(SimdLevel::None);
     EXPECT_NO_THROW((void)eval("123"sv));
     clear_global_simd_override();
 #else
