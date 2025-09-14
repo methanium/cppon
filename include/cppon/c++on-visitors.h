@@ -381,7 +381,13 @@ inline cppon& visitor(cppon& object, size_t index) {
 		using type = std::decay_t<decltype(arg)>;
 		if constexpr (std::is_same_v<type, array_t>)
 			return visitor(arg, index);
-		throw type_mismatch_error{};
+        if constexpr (std::is_same_v<type, nullptr_t>) {
+            // autovivify the root as an object if it is null
+            if (object.try_object()) throw type_mismatch_error{};
+            if (object.try_array() == nullptr) object = cppon{ array_t{} };
+            return visitor(std::get<array_t>(object), index);
+        }
+        throw type_mismatch_error{};
     }, static_cast<value_t&>(object));
 }
 
@@ -449,6 +455,23 @@ inline cppon& visitor(cppon& object, string_view_t index) {
             return visitor(arg, index);
         if constexpr (std::is_same_v<type, array_t>)
             return visitor(arg, index);
+        if constexpr (std::is_same_v<type, nullptr_t>) {
+            // autovivify the root as an object if it is null
+            auto next{ index.find('/') };
+            auto key = index.substr(0, next); // key is a name
+            if (all_digits(key)) {
+                // next key is a number
+                if (object.try_object()) throw type_mismatch_error{};
+                if (object.try_array() == nullptr) object = cppon{ array_t{} };
+                return visitor(std::get<array_t>(object), index);
+            }
+            else {
+                // next key is a string
+                if (object.try_array()) throw type_mismatch_error{};
+                if (object.try_object() == nullptr) object = cppon{ object_t{} };
+                return visitor(std::get<object_t>(object), index);
+            }
+        }
         throw type_mismatch_error{};
     }, static_cast<value_t&>(object));
 }

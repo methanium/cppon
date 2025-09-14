@@ -2588,15 +2588,26 @@ public:
  * @section Bad Logic Exceptions
  *EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE*/
 
- /**
-  * @brief Exception for unsafe pointer assignment.
-  */
+/**
+ * @brief Exception for unsafe pointer assignment.
+ */
 class unsafe_pointer_assignment_error : public std::logic_error {
 public:
     explicit unsafe_pointer_assignment_error(std::string_view detail = {})
         : std::logic_error{ detail.empty()
             ? "unsafe pointer assignment"
             : std::string{ "unsafe pointer assignment: " }.append(detail) } {}
+};
+
+/**
+ * @brief Exception for object reference lost.
+ */
+class object_reference_lost_error : public std::logic_error {
+public:
+    explicit object_reference_lost_error(std::string_view detail = {})
+        : std::logic_error{ detail.empty()
+            ? "object reference lost"
+            : std::string{ "object reference lost: " }.append(detail) } {}
 };
 
 /*EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
@@ -2625,9 +2636,9 @@ public:
  * @section I/O Exceptions
  *EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE*/
 
- /**
-  * @brief Exception for file operations errors.
-  */
+/**
+ * @brief Exception for file operations errors.
+ */
 class file_operation_error : public std::runtime_error {
 public:
     explicit file_operation_error(std::string_view filename, std::string_view operation = {})
@@ -3109,8 +3120,6 @@ struct is_in_variant_lv<T, std::variant<Types...>>
 
 class cppon : public value_t {
 public:
-    auto is_null() const -> bool {return std::holds_alternative<nullptr_t>(*this);}
-
     cppon() = default;
     cppon(const cppon&) = default;
     cppon(cppon&&) noexcept = default;
@@ -3118,7 +3127,33 @@ public:
     cppon& operator=(const cppon&) = default;
     cppon& operator=(cppon&&) noexcept = default;
 
+    /**
+    * @brief Verifies that a cppon object is valid and throws an exception if it is not
+    *
+    * Helper that checks if a cppon object is not in the valueless_by_exception state,
+    * throwing an explicit exception if it is. This prevents undefined behavior
+    * by transforming a potential UB into a detectable logic error.
+    *
+    * @throws object_reference_lost_error if the object is invalid
+    */
+    inline bool check_valid() const noexcept {
+        if (valueless_by_exception()) {
+            CPPON_ASSERT(!"Reference lost: Object is in valueless_by_exception state");
+            return false;
+        }
+        return true;
+    }
+    inline bool ensure_valid() const {
+        if (!check_valid()) throw object_reference_lost_error{ "Object is in valueless_by_exception state" };
+    }
+
+    auto is_null() const -> bool {
+        ensure_valid();
+        return std::holds_alternative<nullptr_t>(*this);
+    }
+
     auto operator[](string_view_t index)->cppon& {
+        ensure_valid();
         CPPON_ASSERT(!index.empty() && "Index cannot be empty");
         if (index.front() == '/') {
             visitors::push_root(*this);
@@ -3128,6 +3163,7 @@ public:
     }
 
     auto operator[](string_view_t index)const->const cppon& {
+        ensure_valid();
         CPPON_ASSERT(!index.empty() && "Index cannot be empty");
         if (index.front() == '/') {
             visitors::push_root(*this);
@@ -3137,19 +3173,23 @@ public:
     }
 
     auto operator[](size_t index)->cppon& {
+        ensure_valid();
         return visitors::visitor(*this, index);
     }
 
     auto operator[](size_t index)const->const cppon& {
+        ensure_valid();
         return visitors::visitor(*this, index);
     }
 
     auto& operator=(const char* val) {
+        ensure_valid();
         value_t::operator=(string_view_t{ val });
         return *this;
     }
 
     auto& operator=(pointer_t pointer) {
+        ensure_valid();
         if (pointer && pointer->valueless_by_exception()) {
             throw unsafe_pointer_assignment_error(
                 "RHS points to a valueless_by_exception object. "
@@ -3164,37 +3204,53 @@ public:
     template<
         typename T,
         typename std::enable_if<is_in_variant_lv<const T, value_t>::value, int>::type = 0>
-    auto& operator=(const T& val) { value_t::operator=(val); return *this; }
+    auto& operator=(const T& val) {
+        ensure_valid();
+        value_t::operator=(val); return *this;
+    }
 
     // Template for rvalue references, disabled for types not contained in value_t
     template<
         typename T,
         typename std::enable_if<is_in_variant_rv<T, value_t>::value, int>::type = 0>
-    auto& operator=(T&& val) { value_t::operator=(std::forward<T>(val)); return *this; }
+    auto& operator=(T&& val) {
+        ensure_valid();
+        value_t::operator=(std::forward<T>(val)); return *this;
+    }
 
     // Underlying container access (throws type_mismatch_error on wrong type)
     auto array() -> array_t& {
+        ensure_valid();
         if (auto p = std::get_if<array_t>(this)) return *p;
         throw type_mismatch_error{ "array_t expected" };
     }
     auto array() const -> const array_t& {
+        ensure_valid();
         if (auto p = std::get_if<array_t>(this)) return *p;
         throw type_mismatch_error{ "array_t expected" };
     }
     auto object() -> object_t& {
+        ensure_valid();
         if (auto p = std::get_if<object_t>(this)) return *p;
         throw type_mismatch_error{ "object_t expected" };
     }
     auto object() const -> const object_t& {
+        ensure_valid();
         if (auto p = std::get_if<object_t>(this)) return *p;
         throw type_mismatch_error{ "object_t expected" };
     }
 
     // Optional non-throw helpers
-    auto try_array() noexcept -> array_t* { return std::get_if<array_t>(this); }
-    auto try_array() const noexcept -> const array_t* { return std::get_if<array_t>(this); }
-    auto try_object() noexcept -> object_t* { return std::get_if<object_t>(this); }
-    auto try_object() const noexcept -> const object_t* { return std::get_if<object_t>(this); }
+    auto try_array() noexcept -> array_t* { return check_valid() ? std::get_if<array_t>(this) : nullptr; }
+    auto try_array() const noexcept -> const array_t* { return check_valid() ? std::get_if<array_t>(this) : nullptr; }
+    auto try_object() noexcept -> object_t* { return check_valid() ? std::get_if<object_t>(this) : nullptr; }
+    auto try_object() const noexcept -> const object_t* { return check_valid() ? std::get_if<object_t>(this) : nullptr; }
+
+    // Array iteration
+    auto begin() { return array().begin(); }
+    auto end() { return array().end(); }
+    auto begin() const{ return array().begin(); }
+    auto end() const { return array().end(); }
 };
 
 #ifdef CPPON_ENABLE_STD_GET_INJECTION
@@ -3586,7 +3642,13 @@ inline cppon& visitor(cppon& object, size_t index) {
 		using type = std::decay_t<decltype(arg)>;
 		if constexpr (std::is_same_v<type, array_t>)
 			return visitor(arg, index);
-		throw type_mismatch_error{};
+        if constexpr (std::is_same_v<type, nullptr_t>) {
+            // autovivify the root as an object if it is null
+            if (object.try_object()) throw type_mismatch_error{};
+            if (object.try_array() == nullptr) object = cppon{ array_t{} };
+            return visitor(std::get<array_t>(object), index);
+        }
+        throw type_mismatch_error{};
     }, static_cast<value_t&>(object));
 }
 
@@ -3654,6 +3716,23 @@ inline cppon& visitor(cppon& object, string_view_t index) {
             return visitor(arg, index);
         if constexpr (std::is_same_v<type, array_t>)
             return visitor(arg, index);
+        if constexpr (std::is_same_v<type, nullptr_t>) {
+            // autovivify the root as an object if it is null
+            auto next{ index.find('/') };
+            auto key = index.substr(0, next); // key is a name
+            if (all_digits(key)) {
+                // next key is a number
+                if (object.try_object()) throw type_mismatch_error{};
+                if (object.try_array() == nullptr) object = cppon{ array_t{} };
+                return visitor(std::get<array_t>(object), index);
+            }
+            else {
+                // next key is a string
+                if (object.try_array()) throw type_mismatch_error{};
+                if (object.try_object() == nullptr) object = cppon{ object_t{} };
+                return visitor(std::get<object_t>(object), index);
+            }
+        }
         throw type_mismatch_error{};
     }, static_cast<value_t&>(object));
 }
@@ -3917,7 +3996,7 @@ using visitors::get_optional;
 
 namespace ch5 {
 
-// SWAR constants
+// SWAR constants (SIMD Within A Register)
 constexpr uint64_t kOnes = 0x0101010101010101ULL;   // (~0ULL / 255)
 constexpr uint64_t kHigh = 0x8080808080808080ULL;   // (~0ULL / 255) * 128
 
@@ -5159,6 +5238,7 @@ struct printer_state {
 	bool Compatible{ false };     /**< Flag indicating whether to print the JSON representation in a compatible format. */
 	bool RetainBuffer{ false };   /**< Flag indicating whether to retain the buffer between printing sessions. */
 	void swap(printer& Printer) noexcept;
+	cppon to_cppon() const;
 };
 
 inline static auto& get_printer_state() {
@@ -5594,6 +5674,29 @@ inline void printer_state::swap(printer& Printer) noexcept {
 	std::swap(Printer.Compatible, Compatible);
 	std::swap(Printer.RetainBuffer, RetainBuffer);
 }
+inline cppon printer_state::to_cppon() const {
+	cppon Options;
+	auto& buffer = Options["buffer"];
+	buffer["retain"] = RetainBuffer;
+	buffer["reserve"] = Reserve;
+
+	auto& layout = Options["layout"];
+	layout["json"] = Compatible;
+	layout["flatten"] = Flatten;
+	layout["compact"] = !Pretty;
+	if (Pretty) layout["pretty"] = AltLayout;
+	if (Margin != 0) layout["margin"] = Margin;
+	if (Tabs != 2) layout["tabulation"] = Tabs;
+	if (!Pretty) layout["compact"] = true;
+	if (Compacted.empty()) layout["compact"] = !Pretty;
+	else {
+		size_t index = 0;
+		auto& compact = layout["compact"];
+		for (auto& Label : Compacted)
+			compact[index++] = Label;
+	}
+	return Options;
+}
 
 inline void write_options(printer& Printer, const cppon& Options) {
 	details::string_set_t CompactedList{};
@@ -5689,6 +5792,21 @@ inline void write_options(printer& Printer, const cppon& Options) {
 	}
 }
 
+inline cppon configure_printer(const cppon& Options, bool get_previous = false) {
+	auto& state = get_printer_state();
+	cppon previous = get_previous ? state.to_cppon() : cppon{};
+	printer Printer;
+	state.swap(Printer);
+	Printer.configure(Options);
+	state.swap(Printer);
+	return previous;
+}
+
+inline cppon configure_printer(string_view_t OptionsJson, bool get_previous = false) {
+	if (OptionsJson.empty()) throw bad_option_error{"empty options"};
+	return configure_printer(eval(OptionsJson), get_previous);
+}
+
 /**
  * @brief Formats and prints floating-point numbers with appropriate precision.
  *
@@ -5725,9 +5843,32 @@ inline void print_floats(printer& Printer, char* Buffer, size_t BufferSize, cons
 	Printer.print(Buffer, static_cast<size_t>(Len));
 	}
 
+/**
+ * @brief Garde RAII pour configuration temporaire du thread printer
+ *
+ * Permet de modifier la configuration du thread printer pour un scope
+ * et de la restaurer automatiquement en sortant du scope.
+ */
+class printer_guard {
+	printer saved_printer;
+public:
+	printer_guard(const cppon& Options) {
+		auto& state = get_printer_state();
+		state.swap(saved_printer);
+		configure_printer(Options);
+	}
+
+	~printer_guard() {
+		auto& state = get_printer_state();
+		state.swap(saved_printer);
+	}
+};
+
 }//namespace details
 
 using details::printer;
+using details::printer_guard;
+using details::configure_printer;
 
 /**
  * @brief Overloads of the print function for various data types.
@@ -5949,9 +6090,12 @@ inline auto operator<<(printer& Printer, const cppon& Value) -> printer& {
 	return Printer;
 }
 inline auto operator<<(std::ostream& Stream, const cppon& Value) -> std::ostream& {
+	auto& State = details::get_printer_state();
 	printer Printer;
+	State.swap(Printer);
 	print(Printer, Value);
-    Stream.write(Printer.Out.data(), static_cast<std::streamsize>(Printer.Out.size()));
+	State.swap(Printer);
+	Stream.write(Printer.Out.data(), static_cast<std::streamsize>(Printer.Out.size()));
     return Stream;
 }
 

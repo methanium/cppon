@@ -162,31 +162,30 @@ void run_tests() {
 		auto print3 = to_string(root, "{\"compact\" : false}");
 		auto print4 = to_string(root, "{\"layout\" : {\"flatten\":true,\"compact\":false}}");
 
-		auto object = ch5::eval(
-			"{"
-			"\"root\":["
-			"{"
-			"\"info\":{"
-			"\"id\":\"test\","
-			"\"pointer\":\"$cppon-path:/root/1\""
-			"}"
-			"},"
-			"{"
-			"\"info\":{"
-			"\"id\":\"test\","
-			"\"pointer\":\"$cppon-path:/root/2\""
-			"}"
-			"},"
-			"{"
-			"\"info\":{"
-			"\"id\":\"test\","
-			"\"pointer\":\"$cppon-path:/root/2\""
-			"}"
-			"},"
-			"[\"cppon-path:/root/0/info\"]"
-			"],"
-			"\"version\":false"
-			"}");
+		auto object = ch5::eval(R"({
+			"root":[
+				{
+					"info":{
+						"id":"test",
+						"pointer":"$cppon-path:/root/1"
+					}
+				},
+				{
+					"info":{
+						"id":"test",
+						"pointer":"$cppon-path:/root/2"
+					}
+				},
+				{
+					"info":{
+						"id":"test",
+						"pointer":"$cppon-path:/root/2"
+					}
+				},
+				["cppon-path:/root/0/info"]
+			],
+			"version":false
+		})");
 
 		auto OldWhat = object["/root/0/info"];
 		auto Absolute = object["/root/0"];
@@ -207,6 +206,19 @@ void run_tests() {
 		object["version"] = 1.0;
 		object["version"] = ch5::eval("3.14", ch5::Quick);
 
+		for (auto& subRoot : object["root"]) {
+			if (subRoot.try_array()) {
+				subRoot[1] = "added";
+				continue;
+			}
+			for (auto& [key, value] : subRoot.object()) {
+				key;
+				value;
+			}
+			subRoot["info/extra"] = "added";
+		}
+
+		auto lastConfig = ch5::configure_printer(R"({"compact":false})", true);
 
 		int intValue = ch5::get_cast<int>(object["version"]);
 		double Value = ch5::get_strict<double>(object["version"]);

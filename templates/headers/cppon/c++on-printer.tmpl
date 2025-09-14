@@ -47,6 +47,7 @@ struct printer_state {
 	bool Compatible{ false };     /**< Flag indicating whether to print the JSON representation in a compatible format. */
 	bool RetainBuffer{ false };   /**< Flag indicating whether to retain the buffer between printing sessions. */
 	void swap(printer& Printer) noexcept;
+	cppon to_cppon() const;
 };
 
 inline static auto& get_printer_state() {
@@ -482,6 +483,29 @@ inline void printer_state::swap(printer& Printer) noexcept {
 	std::swap(Printer.Compatible, Compatible);
 	std::swap(Printer.RetainBuffer, RetainBuffer);
 }
+inline cppon printer_state::to_cppon() const {
+	cppon Options;
+	auto& buffer = Options["buffer"];
+	buffer["retain"] = RetainBuffer;
+	buffer["reserve"] = Reserve;
+
+	auto& layout = Options["layout"];
+	layout["json"] = Compatible;
+	layout["flatten"] = Flatten;
+	layout["compact"] = !Pretty;
+	if (Pretty) layout["pretty"] = AltLayout;
+	if (Margin != 0) layout["margin"] = Margin;
+	if (Tabs != 2) layout["tabulation"] = Tabs;
+	if (!Pretty) layout["compact"] = true;
+	if (Compacted.empty()) layout["compact"] = !Pretty;
+	else {
+		size_t index = 0;
+		auto& compact = layout["compact"];
+		for (auto& Label : Compacted)
+			compact[index++] = Label;
+	}
+	return Options;
+}
 
 inline void write_options(printer& Printer, const cppon& Options) {
 	details::string_set_t CompactedList{};
@@ -577,6 +601,21 @@ inline void write_options(printer& Printer, const cppon& Options) {
 	}
 }
 
+inline cppon configure_printer(const cppon& Options, bool get_previous = false) {
+	auto& state = get_printer_state();
+	cppon previous = get_previous ? state.to_cppon() : cppon{};
+	printer Printer;
+	state.swap(Printer);
+	Printer.configure(Options);
+	state.swap(Printer);
+	return previous;
+}
+
+inline cppon configure_printer(string_view_t OptionsJson, bool get_previous = false) {
+	if (OptionsJson.empty()) throw bad_option_error{"empty options"};
+	return configure_printer(eval(OptionsJson), get_previous);
+}
+
 /**
  * @brief Formats and prints floating-point numbers with appropriate precision.
  *
@@ -613,9 +652,32 @@ inline void print_floats(printer& Printer, char* Buffer, size_t BufferSize, cons
 	Printer.print(Buffer, static_cast<size_t>(Len));
 	}
 
+/**
+ * @brief Garde RAII pour configuration temporaire du thread printer
+ *
+ * Permet de modifier la configuration du thread printer pour un scope
+ * et de la restaurer automatiquement en sortant du scope.
+ */
+class printer_guard {
+	printer saved_printer;
+public:
+	printer_guard(const cppon& Options) {
+		auto& state = get_printer_state();
+		state.swap(saved_printer);
+		configure_printer(Options);
+	}
+
+	~printer_guard() {
+		auto& state = get_printer_state();
+		state.swap(saved_printer);
+	}
+};
+
 }//namespace details
 
 using details::printer;
+using details::printer_guard;
+using details::configure_printer;
 
 /**
  * @brief Overloads of the print function for various data types.
@@ -837,9 +899,12 @@ inline auto operator<<(printer& Printer, const cppon& Value) -> printer& {
 	return Printer;
 }
 inline auto operator<<(std::ostream& Stream, const cppon& Value) -> std::ostream& {
+	auto& State = details::get_printer_state();
 	printer Printer;
+	State.swap(Printer);
 	print(Printer, Value);
-    Stream.write(Printer.Out.data(), static_cast<std::streamsize>(Printer.Out.size()));
+	State.swap(Printer);
+	Stream.write(Printer.Out.data(), static_cast<std::streamsize>(Printer.Out.size()));
     return Stream;
 }
 

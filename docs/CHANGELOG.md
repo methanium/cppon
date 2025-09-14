@@ -25,6 +25,10 @@ Format: Inspired by Keep a Changelog (https://keepachangelog.com) and SemVer.
 - `deref_if_ptr`: explicit support for `"$cppon-path:/"` (resolves to root).
 
 ### Fixed
+- Added critical safety checks to prevent undefined behavior when accessing objects in `valueless_by_exception` state
+- Added `check_valid()` (noexcept) and `ensure_valid()` (throwing) methods to `cppon` class for robust state validation
+- Fixed potential reference invalidation issues when modifying nested objects (e.g., `Options["buffer"]` then `Options["layout"]`)
+- Enhanced robustness of `try_*` methods to safely handle invalid object states while preserving ABI compatibility
 - Removed a stray empty bullet in documentation.
 - Corrected a mistyped numeric value in docs (no code impact).
 - Fixed broken links in `API_REFERENCE.md` and `LITERALS.md`.

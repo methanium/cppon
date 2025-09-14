@@ -381,7 +381,13 @@ inline cppon& visitor(cppon& object, size_t index) {
 		using type = std::decay_t<decltype(arg)>;
 		if constexpr (std::is_same_v<type, array_t>)
 			return visitor(arg, index);
-		throw type_mismatch_error{};
+        if constexpr (std::is_same_v<type, nullptr_t>) {
+            // autovivify the root as an object if it is null
+            if (object.try_object()) throw type_mismatch_error{};
+            if (object.try_array() == nullptr) object = cppon{ array_t{} };
+            return visitor(std::get<array_t>(object), index);
+        }
+        throw type_mismatch_error{};
     }, static_cast<value_t&>(object));
 }
 
@@ -390,7 +396,7 @@ inline cppon& visitor(cppon& object, size_t index) {
  *
  * This function allows dynamic access to elements within a cppon object, which can be either an array or an object,
  * using a string index. The string index can represent either a direct key in an object or a numeric index in an array.
- * 
+ *
  * Additionally, it supports hierarchical access to nested elements by interpreting the string index as a path, where segments
  * of the path are separated by slashes ('/'). This allows deep access to nested structures, with the non-const version
  * allowing modification of elements.
@@ -419,12 +425,12 @@ inline cppon& visitor(cppon& object, size_t index) {
  * structure is accessed in a read-only manner.
  *
  * @param object The cppon object to visit. This object can be an array or an object, and may contain nested structures.
- * 
+ *
  * @param index A string representing the index or path to the element to access. This can specify direct access or hierarchical access to nested elements.
  *              If index is empty, the function returns the object itself.
- * 
+ *
  * @return (const) cppon& A reference to the cppon element at the specified index or path, with the non-const version allowing modification of the element.
- * 
+ *
  * @throws type_mismatch_error If the cppon object does not match the expected structure for the specified index or path, indicating a type mismatch or invalid access attempt.
  * @throws member_not_found_error In the specified scenarios, indicating that a specified member in the path does not exist.
  * @throws invalid_path_segment_error In the specified scenarios, indicating that a path segment is invalid or out of bounds.
@@ -449,6 +455,23 @@ inline cppon& visitor(cppon& object, string_view_t index) {
             return visitor(arg, index);
         if constexpr (std::is_same_v<type, array_t>)
             return visitor(arg, index);
+        if constexpr (std::is_same_v<type, nullptr_t>) {
+            // autovivify the root as an object if it is null
+            auto next{ index.find('/') };
+            auto key = index.substr(0, next); // key is a name
+            if (all_digits(key)) {
+                // next key is a number
+                if (object.try_object()) throw type_mismatch_error{};
+                if (object.try_array() == nullptr) object = cppon{ array_t{} };
+                return visitor(std::get<array_t>(object), index);
+            }
+            else {
+                // next key is a string
+                if (object.try_array()) throw type_mismatch_error{};
+                if (object.try_object() == nullptr) object = cppon{ object_t{} };
+                return visitor(std::get<object_t>(object), index);
+            }
+        }
         throw type_mismatch_error{};
     }, static_cast<value_t&>(object));
 }

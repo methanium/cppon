@@ -233,15 +233,26 @@ public:
  * @section Bad Logic Exceptions
  *EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE*/
 
- /**
-  * @brief Exception for unsafe pointer assignment.
-  */
+/**
+ * @brief Exception for unsafe pointer assignment.
+ */
 class unsafe_pointer_assignment_error : public std::logic_error {
 public:
     explicit unsafe_pointer_assignment_error(std::string_view detail = {})
         : std::logic_error{ detail.empty()
             ? "unsafe pointer assignment"
             : std::string{ "unsafe pointer assignment: " }.append(detail) } {}
+};
+
+/**
+ * @brief Exception for object reference lost.
+ */
+class object_reference_lost_error : public std::logic_error {
+public:
+    explicit object_reference_lost_error(std::string_view detail = {})
+        : std::logic_error{ detail.empty()
+            ? "object reference lost"
+            : std::string{ "object reference lost: " }.append(detail) } {}
 };
 
 /*EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
@@ -270,9 +281,9 @@ public:
  * @section I/O Exceptions
  *EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE*/
 
- /**
-  * @brief Exception for file operations errors.
-  */
+/**
+ * @brief Exception for file operations errors.
+ */
 class file_operation_error : public std::runtime_error {
 public:
     explicit file_operation_error(std::string_view filename, std::string_view operation = {})

@@ -125,8 +125,6 @@ struct is_in_variant_lv<T, std::variant<Types...>>
 
 class cppon : public value_t {
 public:
-    auto is_null() const -> bool {return std::holds_alternative<nullptr_t>(*this);}
-
     cppon() = default;
     cppon(const cppon&) = default;
     cppon(cppon&&) noexcept = default;
@@ -134,7 +132,33 @@ public:
     cppon& operator=(const cppon&) = default;
     cppon& operator=(cppon&&) noexcept = default;
 
+    /**
+    * @brief Verifies that a cppon object is valid and throws an exception if it is not
+    *
+    * Helper that checks if a cppon object is not in the valueless_by_exception state,
+    * throwing an explicit exception if it is. This prevents undefined behavior
+    * by transforming a potential UB into a detectable logic error.
+    *
+    * @throws object_reference_lost_error if the object is invalid
+    */
+    inline bool check_valid() const noexcept {
+        if (valueless_by_exception()) {
+            CPPON_ASSERT(!"Reference lost: Object is in valueless_by_exception state");
+            return false;
+        }
+        return true;
+    }
+    inline bool ensure_valid() const {
+        if (!check_valid()) throw object_reference_lost_error{ "Object is in valueless_by_exception state" };
+    }
+
+    auto is_null() const -> bool {
+        ensure_valid();
+        return std::holds_alternative<nullptr_t>(*this);
+    }
+
     auto operator[](string_view_t index)->cppon& {
+        ensure_valid();
         CPPON_ASSERT(!index.empty() && "Index cannot be empty");
         if (index.front() == '/') {
             visitors::push_root(*this);
@@ -144,6 +168,7 @@ public:
     }
 
     auto operator[](string_view_t index)const->const cppon& {
+        ensure_valid();
         CPPON_ASSERT(!index.empty() && "Index cannot be empty");
         if (index.front() == '/') {
             visitors::push_root(*this);
@@ -153,19 +178,23 @@ public:
     }
 
     auto operator[](size_t index)->cppon& {
+        ensure_valid();
         return visitors::visitor(*this, index);
     }
 
     auto operator[](size_t index)const->const cppon& {
+        ensure_valid();
         return visitors::visitor(*this, index);
     }
 
     auto& operator=(const char* val) {
+        ensure_valid();
         value_t::operator=(string_view_t{ val });
         return *this;
     }
 
     auto& operator=(pointer_t pointer) {
+        ensure_valid();
         if (pointer && pointer->valueless_by_exception()) {
             throw unsafe_pointer_assignment_error(
                 "RHS points to a valueless_by_exception object. "
@@ -180,37 +209,53 @@ public:
     template<
         typename T,
         typename std::enable_if<is_in_variant_lv<const T, value_t>::value, int>::type = 0>
-    auto& operator=(const T& val) { value_t::operator=(val); return *this; }
+    auto& operator=(const T& val) {
+        ensure_valid();
+        value_t::operator=(val); return *this;
+    }
 
     // Template for rvalue references, disabled for types not contained in value_t
     template<
         typename T,
         typename std::enable_if<is_in_variant_rv<T, value_t>::value, int>::type = 0>
-    auto& operator=(T&& val) { value_t::operator=(std::forward<T>(val)); return *this; }
+    auto& operator=(T&& val) {
+        ensure_valid();
+        value_t::operator=(std::forward<T>(val)); return *this;
+    }
 
     // Underlying container access (throws type_mismatch_error on wrong type)
     auto array() -> array_t& {
+        ensure_valid();
         if (auto p = std::get_if<array_t>(this)) return *p;
         throw type_mismatch_error{ "array_t expected" };
     }
     auto array() const -> const array_t& {
+        ensure_valid();
         if (auto p = std::get_if<array_t>(this)) return *p;
         throw type_mismatch_error{ "array_t expected" };
     }
     auto object() -> object_t& {
+        ensure_valid();
         if (auto p = std::get_if<object_t>(this)) return *p;
         throw type_mismatch_error{ "object_t expected" };
     }
     auto object() const -> const object_t& {
+        ensure_valid();
         if (auto p = std::get_if<object_t>(this)) return *p;
         throw type_mismatch_error{ "object_t expected" };
     }
 
     // Optional non-throw helpers
-    auto try_array() noexcept -> array_t* { return std::get_if<array_t>(this); }
-    auto try_array() const noexcept -> const array_t* { return std::get_if<array_t>(this); }
-    auto try_object() noexcept -> object_t* { return std::get_if<object_t>(this); }
-    auto try_object() const noexcept -> const object_t* { return std::get_if<object_t>(this); }
+    auto try_array() noexcept -> array_t* { return check_valid() ? std::get_if<array_t>(this) : nullptr; }
+    auto try_array() const noexcept -> const array_t* { return check_valid() ? std::get_if<array_t>(this) : nullptr; }
+    auto try_object() noexcept -> object_t* { return check_valid() ? std::get_if<object_t>(this) : nullptr; }
+    auto try_object() const noexcept -> const object_t* { return check_valid() ? std::get_if<object_t>(this) : nullptr; }
+
+    // Array iteration
+    auto begin() { return array().begin(); }
+    auto end() { return array().end(); }
+    auto begin() const{ return array().begin(); }
+    auto end() const { return array().end(); }
 };
 
 #ifdef CPPON_ENABLE_STD_GET_INJECTION

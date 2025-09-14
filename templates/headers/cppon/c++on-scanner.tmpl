@@ -21,7 +21,7 @@
 
 namespace ch5 {
 
-// SWAR constants
+// SWAR constants (SIMD Within A Register)
 constexpr uint64_t kOnes = 0x0101010101010101ULL;   // (~0ULL / 255)
 constexpr uint64_t kHigh = 0x8080808080808080ULL;   // (~0ULL / 255) * 128
 
