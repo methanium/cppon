@@ -59,6 +59,10 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
 #define CPPON_BLOB_PREFIX "$cppon-blob:"
 #endif
 
+#ifndef CPPON_NUMBER_PREFIX
+#define CPPON_NUMBER_PREFIX "$cppon-number:"
+#endif
+
 #ifndef CPPON_MAX_ARRAY_DELTA
 #define CPPON_MAX_ARRAY_DELTA 256
 #endif
@@ -115,13 +119,18 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
 
 #include "c++on-exceptions.h"
 #include "c++on-alternatives.h"
+#include "c++on-printer-state.h"
+#include "c++on-swar.h"
 #include "c++on-types.h"
-#include "c++on-visitors.h"
+#include "c++on-thread.h"
+#include "c++on-references.h"
 #include "c++on-scanner.h"
 #include "c++on-parser.h"
-#include "c++on-literals.h"
-#include "c++on-references.h"
 #include "c++on-printer.h"
+#include "c++on-roots.h"
+#include "c++on-visitors.h"
+#include "c++on-literals.h"
 #include "c++on-document.h"
+#include "c++on-config.h"
 
 #endif // CPPON_H

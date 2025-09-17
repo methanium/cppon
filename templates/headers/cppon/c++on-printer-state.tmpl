@@ -1,0 +1,42 @@
+/*
+ * C++ON - High performance C++17 JSON parser with extended features
+ * https://github.com/methanium/cppon
+ *
+ * File: c++on-printer-state.h : C++ON Printer State Management
+ *
+ * MIT License
+ * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
+ *
+ * See LICENSE file for complete license details
+ */
+
+#ifndef CPPON_PRINTER_STATE_H
+#define CPPON_PRINTER_STATE_H
+
+[[@UBER ? @STDCAPTURE : <unordered_set>]]
+
+namespace ch5 {
+namespace printer_state {
+
+typedef std::unordered_set<std::string_view> string_set_t;
+
+struct state {
+	std::string Out;              /**< The output string that stores the printed JSON representation. */
+	string_set_t Compacted;       /**< The set of labels for compacted objects. */
+	int Level{ 0 };               /**< The current indentation level. */
+	int Tabs{ 2 };                /**< The number of spaces per indentation level. */
+	int Margin{ 0 };              /**< The margin of the printed JSON representation. */
+	bool Reserve{ true };         /**< Flag indicating whether to reserve memory for printing the JSON representation. */
+	bool Flatten{ false };        /**< Flag indicating whether to expand all objects. */
+	bool Pretty{ false };         /**< Flag indicating whether to print the JSON representation in a pretty format. */
+	bool AltLayout{ false };      /**< Flag indicating whether to print the JSON representation in an alternative layout. */
+	bool Compatible{ false };     /**< Flag indicating whether to print the JSON representation in a compatible format. */
+	bool Exact{ false };          /**< Flag indicating whether to print numbers in exact format. */
+	bool RetainBuffer{ false };   /**< Flag indicating whether to retain the buffer between printing sessions. */
+	cppon to_cppon() const;
+};
+
+} // namespace printer_state
+} // namespace ch5
+
+#endif // CPPON_PRINTER_STATE_H

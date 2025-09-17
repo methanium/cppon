@@ -14,54 +14,59 @@
 #define CPPON_PRINTER_H
 
 #include "c++on-types.h"
+#include "c++on-thread.h"
 #include "c++on-parser.h"
 #include "c++on-references.h"
+#include "c++on-printer-state.h"
 #include <unordered_set>
 #include <ostream>
 #include <cstdio>
 #include <cstring>
 
 namespace ch5 {
+cppon printer_state::state::to_cppon() const {
+	cppon Options;
+	auto& buffer = Options["buffer"];
+	auto& layout = Options["layout"];
+
+	buffer["retain"] = RetainBuffer;
+	buffer["reserve"] = Reserve;
+
+	layout["exact"] = Exact;
+	layout["json"] = Compatible;
+	layout["flatten"] = Flatten;
+	layout["compact"] = !Pretty;
+
+	if (Pretty) layout["pretty"] = AltLayout;
+	if (Margin != 0) layout["margin"] = Margin;
+	if (Tabs != 2) layout["tabulation"] = Tabs;
+	if (!Pretty) layout["compact"] = true;
+	if (Compacted.empty()) layout["compact"] = !Pretty;
+	else {
+		size_t index = 0;
+		auto& compact = layout["compact"];
+		for (auto& Label : Compacted)
+			compact[index++] = Label;
+	}
+	return Options;
+}
+
 namespace details {
 
 // These limits represent the largest integers that can be precisely represented
 // in IEEE-754 double-precision floating point, which is what JSON uses for numbers
 constexpr int64_t json_min_limit = -9007199254740991;
 constexpr int64_t json_max_limit = 9007199254740991;
-constexpr size_t printer_reserve_per_element = CPPON_PRINTER_RESERVE_PER_ELEMENT;
-constexpr string_view_t path_prefix = CPPON_PATH_PREFIX;
-constexpr string_view_t blob_prefix = CPPON_BLOB_PREFIX;
 typedef std::unordered_set<std::string_view> string_set_t;
 
 struct printer;
-struct printer_state {
-	std::string Out;              /**< The output string that stores the printed JSON representation. */
-	string_set_t Compacted;       /**< The set of labels for compacted objects. */
-	int Level{ 0 };               /**< The current indentation level. */
-	int Tabs{ 2 };                /**< The number of spaces per indentation level. */
-	int Margin{ 0 };              /**< The margin of the printed JSON representation. */
-	bool Reserve{ true };         /**< Flag indicating whether to reserve memory for printing the JSON representation. */
-	bool Flatten{ false };        /**< Flag indicating whether to expand all objects. */
-	bool Pretty{ false };         /**< Flag indicating whether to print the JSON representation in a pretty format. */
-	bool AltLayout{ false };      /**< Flag indicating whether to print the JSON representation in an alternative layout. */
-	bool Compatible{ false };     /**< Flag indicating whether to print the JSON representation in a compatible format. */
-	bool RetainBuffer{ false };   /**< Flag indicating whether to retain the buffer between printing sessions. */
-	void swap(printer& Printer) noexcept;
-	cppon to_cppon() const;
-};
-
-inline static auto& get_printer_state() {
-	static thread_local printer_state State;
-	return State;
-	}
-
 inline auto apply_options(const cppon& Options) {
-
 	string_set_t CompactedList{};
 	int Alternative = -1;
 	int Compacted = -1;
 	int Compacting = -1;
 	int Compatible = -1;
+	int Exact = -1;
 	int Flattening = -1;
 	int Reserving = -1;
 	int Reseting = -1;
@@ -81,7 +86,7 @@ inline auto apply_options(const cppon& Options) {
 				return; // no buffer option specified
 			else if constexpr (std::is_same_v<type, object_t>) {
 				for (auto& [Name, Value] : Opt) {
-					auto Label{ Name };
+					const auto& Label{ Name };
 					std::visit([&](auto&& Val) {
 						using type = std::decay_t<decltype(Val)>;
 						if constexpr (std::is_same_v<type, boolean_t>) {
@@ -184,7 +189,7 @@ inline auto apply_options(const cppon& Options) {
 				return; // no layout option specified
 			else if constexpr (std::is_same_v<type, object_t>) {
 				for (auto& [Name, Value] : Opt) {
-					auto Label{ Name };
+					const auto& Label{ Name };
 					if (Label == "compact") {
 						visit_compact(Value);
 					}
@@ -195,6 +200,7 @@ inline auto apply_options(const cppon& Options) {
 								if (Label == "flatten") Flattening = Val;
 								else if (Label == "json") Compatible = Val;
 								else if (Label == "cppon") Compatible = !Val;
+								else if (Label == "exact") Exact = Val;
 								else if (Label == "pretty") Alternative = Val;
 								else throw bad_option_error("layout: invalid option");
 							}
@@ -212,6 +218,7 @@ inline auto apply_options(const cppon& Options) {
 				if (Opt == "flatten") Flattening = true;
 				else if (Opt == "json") Compatible = true;
 				else if (Opt == "cppon") Compatible = false;
+				else if (Opt == "exact") Exact = true;
 				else throw bad_option_error("layout: invalid option");
 			}
 			else throw bad_option_error("layout: type mismatch");
@@ -226,7 +233,7 @@ inline auto apply_options(const cppon& Options) {
 	visit_tabulation(Options["tabulation"]);
 
 	return std::make_tuple(CompactedList, Alternative, Compacted, Compacting,
-		Compatible, Flattening, Reserving, Reseting,
+		Compatible, Exact, Flattening, Reserving, Reseting,
 		Retaining, Margin, Tabulation);
 }
 inline void write_options(printer& Printer, const cppon& Options);
@@ -234,21 +241,25 @@ inline void write_options(printer& Printer, const cppon& Options);
 /**
  * @brief The printer struct is responsible for printing the JSON representation of cppon objects.
  */
-struct printer
+struct printer : public printer_state::state
 {
 	reference_vector_t* Refs{};   /**< The object map that stores the references to objects. */
 	string_view_t Compacting;          /**< The compacting string that stores the current compacting object. */
-	string_set_t Compacted;       /**< The set of labels for compacted objects. */
-	std::string Out;              /**< The output string that stores the printed JSON representation. */
-	int Level{ 0 };               /**< The current indentation level. */
-	int Tabs{ 2 };                /**< The number of spaces per indentation level. */
-	int Margin{ 0 };              /**< The margin of the printed JSON representation. */
-	bool Reserve{ true };         /**< Flag indicating whether to reserve memory for printing the JSON representation. */
-	bool Flatten{ false };        /**< Flag indicating whether to expand all objects. */
-	bool Pretty{ false };         /**< Flag indicating whether to print the JSON representation in a pretty format. */
-	bool AltLayout{ false };	  /**< Flag indicating whether to print the JSON representation in an alternative layout. */
-	bool Compatible{ false };     /**< Flag indicating whether to print the JSON representation in a compatible format. */
-	bool RetainBuffer{ false };   /**< Flag indicating whether to retain the buffer between printing sessions. */
+
+	void swap(printer_state::state& State) noexcept {
+		std::swap(State.Out, Out);
+		std::swap(State.Compacted, Compacted);
+		std::swap(State.Level, Level);
+		std::swap(State.Tabs, Tabs);
+		std::swap(State.Margin, Margin);
+		std::swap(State.Reserve, Reserve);
+		std::swap(State.Flatten, Flatten);
+		std::swap(State.Pretty, Pretty);
+		std::swap(State.AltLayout, AltLayout);
+		std::swap(State.Compatible, Compatible);
+		std::swap(State.Exact, Exact);
+		std::swap(State.RetainBuffer, RetainBuffer);
+	}
 
 	void configure(const cppon& Options, reference_vector_t* References = nullptr) {
 		Refs = References;
@@ -269,7 +280,7 @@ struct printer
 	 */
 	void preallocate(size_t ElementCount) {
 		if (Reserve) {
-			Out.reserve(Out.size() + printer_reserve_per_element * ElementCount + 2);
+			Out.reserve(Out.size() + thread::printer_reserve_per_element * ElementCount + 2);
 			}
 		}
 
@@ -343,7 +354,7 @@ struct printer
 	 */
 	void reset_margin() {
 		if (Pretty) {
-			Out.append(Level * Tabs, ' ');
+			Out.append(size_t(Level * Tabs), ' ');
 			}
 		}
 
@@ -427,10 +438,10 @@ struct printer
 		if (Pretty) {
 			if (Compacting.empty()) {
 				if (Reserve) {
-					Out.reserve(Out.size() + Level * Tabs + 1);
+					Out.reserve(Out.size() + size_t(Level * Tabs + 1));
 					}
 				Out.push_back('\n');
-				Out.append(Level * Tabs, ' ');
+				Out.append(size_t(Level * Tabs), ' ');
 				}
 			else {
 				Out.push_back(' ');
@@ -470,42 +481,6 @@ struct printer
 		}
 };
 
-inline void printer_state::swap(printer& Printer) noexcept {
-	std::swap(Printer.Out, Out);
-	std::swap(Printer.Compacted, Compacted);
-	std::swap(Printer.Level, Level);
-	std::swap(Printer.Tabs, Tabs);
-	std::swap(Printer.Margin, Margin);
-	std::swap(Printer.Reserve, Reserve);
-	std::swap(Printer.Flatten, Flatten);
-	std::swap(Printer.Pretty, Pretty);
-	std::swap(Printer.AltLayout, AltLayout);
-	std::swap(Printer.Compatible, Compatible);
-	std::swap(Printer.RetainBuffer, RetainBuffer);
-}
-inline cppon printer_state::to_cppon() const {
-	cppon Options;
-	auto& buffer = Options["buffer"];
-	buffer["retain"] = RetainBuffer;
-	buffer["reserve"] = Reserve;
-
-	auto& layout = Options["layout"];
-	layout["json"] = Compatible;
-	layout["flatten"] = Flatten;
-	layout["compact"] = !Pretty;
-	if (Pretty) layout["pretty"] = AltLayout;
-	if (Margin != 0) layout["margin"] = Margin;
-	if (Tabs != 2) layout["tabulation"] = Tabs;
-	if (!Pretty) layout["compact"] = true;
-	if (Compacted.empty()) layout["compact"] = !Pretty;
-	else {
-		size_t index = 0;
-		auto& compact = layout["compact"];
-		for (auto& Label : Compacted)
-			compact[index++] = Label;
-	}
-	return Options;
-}
 
 inline void write_options(printer& Printer, const cppon& Options) {
 	details::string_set_t CompactedList{};
@@ -513,6 +488,7 @@ inline void write_options(printer& Printer, const cppon& Options) {
 	int Compacted = -1;
 	int Compacting = -1;
 	int Compatible = -1;
+	int Exact = -1;
 	int Flattening = -1;
 	int Reserving = -1;
 	int Reseting = -1;
@@ -522,7 +498,7 @@ inline void write_options(printer& Printer, const cppon& Options) {
 	auto ResetPrinter = false;
 	if (!Options.is_null()) {
 		std::tie(CompactedList, Alternative, Compacted, Compacting,
-			Compatible, Flattening, Reserving, Reseting,
+			Compatible, Exact, Flattening, Reserving, Reseting,
 			Retaining, Margin, Tabulation) = details::apply_options(Options);
 	}
 
@@ -588,6 +564,13 @@ inline void write_options(printer& Printer, const cppon& Options) {
 	if (Compatible != -1) {
 		Printer.Compatible = static_cast<bool>(Compatible);
 	}
+	// compatibility
+	if (Exact != -1) {
+		Printer.Exact = static_cast<bool>(Exact);
+	}
+	else {
+		Printer.Exact = static_cast<bool>(thread::exact_number_mode);
+	}
 
 	// reference flattening
 	if (Flattening != -1) {
@@ -602,12 +585,12 @@ inline void write_options(printer& Printer, const cppon& Options) {
 }
 
 inline cppon configure_printer(const cppon& Options, bool get_previous = false) {
-	auto& state = get_printer_state();
+	auto& state = thread::get_printer_state();
 	cppon previous = get_previous ? state.to_cppon() : cppon{};
 	printer Printer;
-	state.swap(Printer);
+	Printer.swap(state);
 	Printer.configure(Options);
-	state.swap(Printer);
+	Printer.swap(state);
 	return previous;
 }
 
@@ -630,7 +613,7 @@ inline cppon configure_printer(string_view_t OptionsJson, bool get_previous = fa
  * @param Num The floating-point value to print
  * @param isDouble Whether the value is a double (true) or float (false)
  */
-inline void print_floats(printer& Printer, char* Buffer, size_t BufferSize, const double_t Num, bool isDouble) {
+inline size_t print_floats(printer& Printer, char* Buffer, size_t BufferSize, const double_t Num, bool isDouble) {
 	auto Len = snprintf(Buffer, BufferSize, isDouble ? "%.16lg" : "%.7g", Num);
 	char* Dot = strchr(Buffer, '.');
 	char* Exp = strpbrk(Buffer, "eE");
@@ -647,9 +630,9 @@ inline void print_floats(printer& Printer, char* Buffer, size_t BufferSize, cons
 		Buffer[Len++] = '.';
 		Buffer[Len++] = '0';
 		}
-	if (!(Printer.Compatible | isDouble)) Buffer[Len++] = 'f';
+	if (!(Printer.Compatible || isDouble)) Buffer[Len++] = 'f';
 	Buffer[Len] = '\0';
-	Printer.print(Buffer, static_cast<size_t>(Len));
+	return Len;
 	}
 
 /**
@@ -662,14 +645,12 @@ class printer_guard {
 	printer saved_printer;
 public:
 	printer_guard(const cppon& Options) {
-		auto& state = get_printer_state();
-		state.swap(saved_printer);
+		saved_printer.swap(thread::get_printer_state());
 		configure_printer(Options);
 	}
 
 	~printer_guard() {
-		auto& state = get_printer_state();
-		state.swap(saved_printer);
+		saved_printer.swap(thread::get_printer_state());
 	}
 };
 
@@ -729,66 +710,126 @@ inline void print(printer& Printer, const boolean_t Bool) {
 	}
 inline void print(printer& Printer, const float_t Num) {
 	char Buffer[24];
-	details::print_floats(Printer, Buffer, sizeof(Buffer), static_cast<const double_t>(Num), false);
+	size_t Len = details::print_floats(Printer, Buffer, sizeof(Buffer), static_cast<const double_t>(Num), false);
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::string_view{ Buffer, Len }, NumberType::cpp_float } });
+		return;
+		}
+	Printer.print(Buffer, Len);
 	}
 inline void print(printer& Printer, const double_t Num) {
 	char Buffer[48];
-	details::print_floats(Printer, Buffer, sizeof(Buffer), static_cast<const double_t>(Num), true);
+	size_t Len = details::print_floats(Printer, Buffer, sizeof(Buffer), static_cast<const double_t>(Num), true);
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::string_view{ Buffer, Len }, NumberType::json_double } });
+		return;
+		}
+	Printer.print(Buffer, Len);
 	}
 inline void print(printer& Printer, const int8_t Num) {
-    Printer.print(std::to_string(static_cast<int>(Num)));
-    if (!Printer.Compatible) Printer.print("i8");
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<int>(Num)), NumberType::cpp_int8 } });
+		return;
+		}
+	Printer.print(std::to_string(static_cast<int>(Num)));
+	if (!Printer.Compatible) Printer.print("i8");
 	}
 inline void print(printer& Printer, const uint8_t Num) {
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<unsigned int>(Num)), NumberType::cpp_uint8 } });
+		return;
+		}
     Printer.print(std::to_string(static_cast<unsigned int>(Num)));
     if (!Printer.Compatible) Printer.print("u8");
 	}
 inline void print(printer& Printer, const int16_t Num) {
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<int>(Num)), NumberType::cpp_int16 } });
+		return;
+		}
     Printer.print(std::to_string(static_cast<int>(Num)));
     if (!Printer.Compatible) Printer.print("i16");
 	}
 inline void print(printer& Printer, const uint16_t Num) {
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<unsigned int>(Num)), NumberType::cpp_uint16 } });
+		return;
+		}
     Printer.print(std::to_string(static_cast<unsigned int>(Num)));
     if (!Printer.Compatible) Printer.print("u16");
 	}
 inline void print(printer& Printer, const int32_t Num) {
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<int>(Num)), NumberType::cpp_int32 } });
+		return;
+		}
     Printer.print(std::to_string(static_cast<int>(Num)));
     if (!Printer.Compatible) Printer.print("i32");
 	}
 inline void print(printer& Printer, const uint32_t Num) {
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<unsigned int>(Num)), NumberType::cpp_uint32 } });
+		return;
+		}
     Printer.print(std::to_string(static_cast<unsigned int>(Num)));
     if (!Printer.Compatible) Printer.print("u32");
 	}
 inline void print(printer& Printer, const int64_t Num) {
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<long long>(Num)), NumberType::cpp_int64 } });
+		return;
+		}
 	if (Printer.Compatible && (Num < details::json_min_limit || Num > details::json_max_limit)) {
 		throw json_compatibility_error("Value out of range for JSON.");
 		}
 	Printer.print(std::to_string(static_cast<long long>(Num)));
 	}
 inline void print(printer& Printer, const uint64_t Num) {
-	if (Printer.Compatible) {
-		if(Num > details::json_max_limit) {
-			throw json_compatibility_error("Value out of range for JSON.");
-			}
-		Printer.print(std::to_string(static_cast<unsigned long long>(Num)));
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<long long>(Num)), NumberType::cpp_uint64 } });
+		return;
 		}
-	else {
-		Printer.print(std::to_string(static_cast<unsigned long long>(Num)));
-		Printer.print('u');
+	if (Printer.Compatible && Num > details::json_max_limit) {
+		throw json_compatibility_error("Value out of range for JSON.");
 		}
+	Printer.print(std::to_string(static_cast<unsigned long long>(Num)));
+	if (!Printer.Compatible) Printer.print('u');
 	}
 inline void print(printer& Printer, const number_t TextualNumber) {
-	Printer.print(TextualNumber);
+	if (Printer.Compatible || Printer.Exact) {
+		std::array<string_view_t, 11> types{
+			"int64", "double", "float", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64"
+			};
+		if (Printer.Compatible)
+			switch (TextualNumber.type) {
+				case NumberType::json_int64:
+				case NumberType::json_double:
+					Printer.print(TextualNumber);
+					return;
+				default:
+					break; // fall through
+				}
+		Printer.print('"');
+		Printer.print(thread::number_prefix);
+		Printer.print(types[static_cast<size_t>(TextualNumber.type)]);
+		Printer.print('(');
+		Printer.print(TextualNumber);
+		Printer.print(')');
+		Printer.print('"');
+		}
+	else {
+		Printer.print(TextualNumber);
+		}
 	}
 inline void print(printer& Printer, const path_t& Path) {
 	Printer.print('"');
-    Printer.print(details::path_prefix);
+    Printer.print(thread::path_prefix);
     Printer.print(Path);
 	Printer.print('"');
 	}
 inline void print(printer& Printer, const blob_string_t& Blob) {
 	Printer.print('"');
-    Printer.print(details::blob_prefix);
+    Printer.print(thread::blob_prefix);
     Printer.print(Blob);
 	Printer.print('"');
 	}
@@ -803,7 +844,7 @@ inline void print(printer& Printer, const array_t& Array) {
 
 	// preallocate storage
 	size_t StructureSize = 2; // '[' and ']'
-	size_t ReservePerElement = details::printer_reserve_per_element; // guess
+	size_t ReservePerElement = thread::printer_reserve_per_element; // guess
 	size_t StartSize = Printer.printed_count();
 	size_t ElementCount = Array.size();
 	size_t CurrentElementCount = 0;
@@ -837,7 +878,7 @@ inline void print(printer& Printer, const object_t& Object) {
 
 	// preallocate storage
 	size_t StructureSize = 2; // '{' and '}' or '"' and '"'
-	size_t ReservePerElement = details::printer_reserve_per_element; // guess
+	size_t ReservePerElement = thread::printer_reserve_per_element; // guess
 	size_t StartSize = Printer.printed_count();
 	size_t ElementCount = Object.size();
 	size_t CurrentElementCount = 0;
@@ -880,7 +921,7 @@ inline void print(printer& Printer, const pointer_t& Pointer) {
 		if (Printer.Refs)
 			print(Printer, path_t{ get_object_path(*Printer.Refs, Pointer) });
 		else
-			print(Printer, path_t{ find_object_path(visitors::get_root(), Pointer) });
+			print(Printer, path_t{ find_object_path(roots::get_root(), Pointer) });
 		}
 	else {
 		print(Printer, *Pointer);
@@ -899,27 +940,27 @@ inline auto operator<<(printer& Printer, const cppon& Value) -> printer& {
 	return Printer;
 }
 inline auto operator<<(std::ostream& Stream, const cppon& Value) -> std::ostream& {
-	auto& State = details::get_printer_state();
+	auto& State = thread::get_printer_state();
 	printer Printer;
-	State.swap(Printer);
+	Printer.swap(State);
 	print(Printer, Value);
-	State.swap(Printer);
 	Stream.write(Printer.Out.data(), static_cast<std::streamsize>(Printer.Out.size()));
+	Printer.swap(State);
     return Stream;
 }
 
 inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, const cppon& Options) -> std::string_view {
-	auto& State = details::get_printer_state();
+	auto& State = thread::get_printer_state();
 	printer Printer;
 
 	// swap printer state
-	State.swap(Printer);
+	Printer.swap(State);
 
 	Printer.configure(Options, Refs);
 	print(Printer, Object);
 
 	// swap back printer state
-	State.swap(Printer);
+	Printer.swap(State);
 
 	// return the printed JSON representation
 	return std::string_view{ State.Out };

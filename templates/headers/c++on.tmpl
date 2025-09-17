@@ -61,6 +61,10 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
 #define CPPON_BLOB_PREFIX "$cppon-blob:"
 #endif
 
+#ifndef CPPON_NUMBER_PREFIX
+#define CPPON_NUMBER_PREFIX "$cppon-number:"
+#endif
+
 #ifndef CPPON_MAX_ARRAY_DELTA
 #define CPPON_MAX_ARRAY_DELTA 256
 #endif
@@ -123,13 +127,18 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
 
 [[@UBER ? @EXCEPTIONS : "c++on-exceptions.h"]]
 [[@UBER ? @ALTERNATIVES : "c++on-alternatives.h"]]
+[[@UBER ? @PRINTER_STATE : "c++on-printer-state.h"]]
+[[@UBER ? @SWAR : "c++on-swar.h"]]
 [[@UBER ? @TYPES : "c++on-types.h"]]
-[[@UBER ? @VISITORS : "c++on-visitors.h"]]
+[[@UBER ? @THREAD : "c++on-thread.h"]]
+[[@UBER ? @REFERENCES : "c++on-references.h"]]
 [[@UBER ? @SCANNER : "c++on-scanner.h"]]
 [[@UBER ? @PARSER : "c++on-parser.h"]]
-[[@UBER ? @LITERALS : "c++on-literals.h"]]
-[[@UBER ? @REFERENCES : "c++on-references.h"]]
 [[@UBER ? @PRINTER : "c++on-printer.h"]]
+[[@UBER ? @ROOTS : "c++on-roots.h"]]
+[[@UBER ? @VISITORS : "c++on-visitors.h"]]
+[[@UBER ? @LITERALS : "c++on-literals.h"]]
 [[@UBER ? @DOCUMENT : "c++on-document.h"]]
+[[@UBER ? @CONFIG : "c++on-config.h"]]
 
 #endif // CPPON_H

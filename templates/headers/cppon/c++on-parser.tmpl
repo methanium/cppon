@@ -14,14 +14,9 @@
 #define CPPON_PARSER_H
 
 [[@UBER ? "" : "c++on-types.h"]]
-[[@UBER ? "" : "c++on-scanner.h"]]
+[[@UBER ? "" : "c++on-thread.h"]]
 
 namespace ch5 {
-
-constexpr string_view_t path_prefix = CPPON_PATH_PREFIX;
-constexpr string_view_t blob_prefix = CPPON_BLOB_PREFIX;
-constexpr size_t object_min_reserve = CPPON_OBJECT_MIN_RESERVE;
-constexpr size_t array_min_reserve = CPPON_ARRAY_MIN_RESERVE;
 
 enum class options {
     full,  // full evaluation, with blob conversion
@@ -198,17 +193,49 @@ inline auto accept_string(string_view_t text, size_t& pos, options opt) -> cppon
 
     if(!value.empty() && value.front() == '$') {
         // If the path prefix is found, return a path object
-        if (value.rfind(path_prefix, 0) == 0)
-		    return cppon{ path_t{ value.substr(path_prefix.size()) } };
+        if (value.rfind(thread::path_prefix, 0) == 0)
+		    return cppon{ path_t{ value.substr(std::size<string_view_t>(thread::path_prefix)) } };
 
         // If the blob prefix is found, return a blob object
-        if (value.rfind(blob_prefix, 0) == 0) {
+        if (value.rfind(thread::blob_prefix, 0) == 0) {
             if (opt == options::full)
                 // If the full option is set, return a blob object with the decoded value
-			    return cppon{ decode_base64(value.substr(blob_prefix.size())) };
+			    return cppon{ decode_base64(value.substr(std::size<string_view_t>(thread::blob_prefix))) };
 		    else
                 // Otherwise, return a blob object with the encoded value
-			    return cppon{ blob_string_t{ value.substr(blob_prefix.size()) } };
+			    return cppon{ blob_string_t{ value.substr(std::size<string_view_t>(thread::blob_prefix)) } };
+        }
+
+        if (value.rfind(thread::number_prefix, 0) == 0) {
+            std::array<string_view_t, 11> types{
+                "int64", "double", "float", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64"
+            };
+            auto TypedValue{ value.substr(std::size<string_view_t>(thread::number_prefix)) };
+            auto lPar = TypedValue.find('(');
+            if (lPar == TypedValue.npos) throw expected_symbol_error{ "(", found };
+            auto rPar = TypedValue.rfind(')');
+            if (rPar == TypedValue.npos) throw expected_symbol_error{ ")", found };
+            auto Type = TypedValue.substr(0, lPar);
+            if (Type.empty()) throw expected_symbol_error{ "type", peek + lPar };
+            auto found = std::find(types.begin(), types.end(), Type);
+            if (found == types.end()) throw expected_symbol_error{ "type", peek + lPar };
+            auto Number = TypedValue.substr(lPar + 1, rPar - lPar - 1);
+            if (Number.empty()) throw expected_symbol_error{ "number", peek + lPar + 1 };
+			NumberType index = static_cast<NumberType>(std::distance(types.begin(), found));
+            switch (index) {
+                case NumberType::json_int64: return cppon{ number_t{ Number, NumberType::json_int64 } };
+				case NumberType::json_double: return cppon{ number_t{ Number, NumberType::json_double } };
+				case NumberType::cpp_float: return cppon{ number_t{ Number, NumberType::cpp_float } };
+				case NumberType::cpp_int8: return cppon{ number_t{ Number, NumberType::cpp_int8 } };
+				case NumberType::cpp_uint8: return cppon{ number_t{ Number, NumberType::cpp_uint8 } };
+				case NumberType::cpp_int16: return cppon{ number_t{ Number, NumberType::cpp_int16 } };
+                case NumberType::cpp_uint16: return cppon{ number_t{ Number, NumberType::cpp_uint16 } };
+                case NumberType::cpp_int32: return cppon{ number_t{ Number, NumberType::cpp_int32 } };
+                case NumberType::cpp_uint32: return cppon{ number_t{ Number, NumberType::cpp_uint32 } };
+                case NumberType::cpp_int64: return cppon{ number_t{ Number, NumberType::cpp_int64 } };
+                case NumberType::cpp_uint64: return cppon{ number_t{ Number, NumberType::cpp_uint64 } };
+                default: throw type_mismatch_error{ "Invalid number type" };
+            }
         }
 	}
 
@@ -340,7 +367,8 @@ inline auto accept_number(string_view_t text, size_t& pos, options opt) -> cppon
 
     cppon value{ number_t{ text.substr(start, scan_size), type } };
 
-    if (opt < options::quick) // options:{full,eval}
+    //if (!Printer.Exact &&
+    if (!thread::exact_number_mode && opt < options::quick) // options:{full,eval}
         convert_to_numeric(value);
 
     return value;
@@ -373,7 +401,7 @@ inline auto accept_array(string_view_t text, size_t& pos, options opt) -> cppon 
     }
     array_t array;
     if (opt != options::parse) // options:{eval,quick}
-        array.reserve(array_min_reserve);
+        array.reserve(thread::array_min_reserve);
     do {
         skip_spaces(text, pos, "array");
         auto value = accept_value(text, pos, opt);
@@ -412,7 +440,7 @@ inline auto accept_object(string_view_t text, size_t& pos, options opt) -> cppon
     }
     object_t object;
     if (opt != options::parse) // options:{eval,quick}
-        object.reserve(object_min_reserve);
+        object.reserve(thread::object_min_reserve);
     do {
         skip_spaces(text, pos, "object");
         auto key = accept_string(text, pos, opt);
@@ -530,6 +558,5 @@ inline auto eval(const char (&text)[N], options opt = Eval) -> cppon {
 using parser::eval;
 
 }//namespace ch5
-
 
 #endif // CPPON_PARSER_H

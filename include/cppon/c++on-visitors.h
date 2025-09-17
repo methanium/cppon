@@ -14,12 +14,16 @@
 #define CPPON_VISITORS_H
 
 #include "c++on-types.h"
+#include "c++on-thread.h"
+#include "c++on-roots.h"
 #include <algorithm>
 
 namespace ch5 {
 namespace visitors {
 
 constexpr size_t max_array_delta = CPPON_MAX_ARRAY_DELTA;
+constexpr size_t object_min_reserve = CPPON_OBJECT_MIN_RESERVE;
+constexpr size_t array_min_reserve = CPPON_ARRAY_MIN_RESERVE;
 
 struct key_t {
 	std::string_view value;
@@ -69,47 +73,6 @@ struct key_t {
  * dynamically linked, accessed, and manipulated within a coherent and stable framework.
  */
 
-// The stack is initialized with a bottom sentinel (nullptr). This avoids empty() checks.
-// The sentinel is never dereferenced because get_root() asserts top != nullptr.
-struct static_storage {
-	static_storage() noexcept : stack{ nullptr }, Null{nullptr} {}
-	std::vector<cppon*> stack;
-	cppon Null;
-};
-inline static_storage& get_static_storage() noexcept {
-	static thread_local static_storage storage;
-	return storage;
-}
-inline cppon& null() noexcept {
-	return get_static_storage().Null;
-}
-inline std::vector<cppon*>& root_stack() noexcept {
-	return get_static_storage().stack;
-}
-inline cppon& get_root() noexcept {
-	CPPON_ASSERT(!root_stack().empty() && root_stack().back() != nullptr &&
-		"Root stack shall never be empty and stack top shall never be nullptr");
-	return *root_stack().back();
-}
-// Promote the entry to top if found; returns true if present (already top or promoted)
-inline bool hoist_if_found(std::vector<cppon*>& s, const cppon* p) noexcept {
-	if (s.back() == p) return true;
-	auto found = std::find(s.rbegin(), s.rend(), p);
-	if (found == s.rend()) return false;
-	std::swap(*found, s.back());
-	return true;
-}
-inline void pop_root(const cppon& root) noexcept {
-	auto& stack = root_stack();
-	if (hoist_if_found(stack, &root))
-		stack.pop_back();
-}
-inline void push_root(const cppon& root) {
-	auto& stack = root_stack();
-	if (!hoist_if_found(stack, &root))
-		stack.push_back(&const_cast<cppon&>(root));
-}
-
 // Return true if every character is '0'..'9' (empty => false for path segments)
 inline bool all_digits(string_view_t sv) noexcept {
 	if (sv.empty()) return false;
@@ -152,7 +115,7 @@ inline auto deref_if_ptr(const cppon& obj) -> const cppon& {
 		if constexpr (std::is_same_v<type, path_t>) {
 			string_view_t tmp = arg.value;
 			tmp.remove_prefix(1);
-			return visitor(static_cast<const cppon&>(get_root()), tmp);
+			return visitor(static_cast<const cppon&>(roots::get_root()), tmp);
 		}
 		return obj;
 	}, static_cast<const value_t&>(obj));
@@ -165,7 +128,7 @@ inline auto deref_if_ptr(cppon& obj) -> cppon& {
 		if constexpr (std::is_same_v<type, path_t>) {
 			string_view_t tmp = arg.value;
 			tmp.remove_prefix(1);
-			return visitor(get_root(), tmp);
+			return visitor(roots::get_root(), tmp);
 		}
 		return obj;
 	}, static_cast<value_t&>(obj));
@@ -189,6 +152,8 @@ inline cppon& deref_if_not_null(cppon& slot) {
 	return deref_if_ptr(slot);
 }
 
+inline cppon& vivify(cppon& slot, string_view_t key);
+
 /**
  * @brief Visitor functions for accessing and potentially modifying members in an object using a key.
  *
@@ -211,6 +176,7 @@ inline auto visitor(const object_t& object, key_t key) noexcept -> const cppon& 
 inline auto visitor(object_t& object, key_t key) -> cppon& {
 	for (auto& [name, value] : object)
 		if (name == key) return value;
+	if (object.empty()) object.reserve(object_min_reserve);
 	object.emplace_back(key, null());
 	return std::get<cppon>(object.back());
 }
@@ -245,6 +211,7 @@ inline cppon& visitor(array_t& array, size_t index) {
 		const size_t max_allowed = array.size() + max_array_delta;
 		if (index > max_allowed)
 			throw excessive_array_resize_error();
+		if (array.empty()) array.reserve(std::max(array_min_reserve, index));
 		array.resize(index + 1, null());
 	}
 	return array[index];
@@ -283,16 +250,7 @@ inline auto visitor(array_t& array, string_view_t index) -> cppon& {
 	auto newIndex{ index.substr(next + 1) };
 	auto nextKey{ newIndex.substr(0, newIndex.find('/')) };
 	CPPON_ASSERT(!nextKey.empty() && "Next key shall never be empty here");
-	if (all_digits(nextKey)) {
-		// next key is a number
-		if (value.try_object()) throw type_mismatch_error{};
-		if (value.try_array() == nullptr) value = cppon{ array_t{} };
-	} else {
-		// next key is a string
-		if (value.try_array()) throw type_mismatch_error{};
-		if (value.try_object() == nullptr) value = cppon{ object_t{} };
-	}
-    return visitor(value, newIndex);
+    return vivify(value, newIndex);
 }
 
 /**
@@ -324,16 +282,7 @@ inline cppon& visitor(object_t& object, string_view_t index) {
 	auto newIndex{ index.substr(next + 1) };
 	auto nextKey{ newIndex.substr(0, newIndex.find('/')) };
 	CPPON_ASSERT(!nextKey.empty() && "Next key shall never be empty here");
-	if (all_digits(nextKey)) {
-		// next key is a number
-		if (value.try_object()) throw type_mismatch_error{};
-		if (value.try_array() == nullptr) value = cppon{ array_t{} };
-	} else {
-		// next key is a string
-		if (value.try_array()) throw type_mismatch_error{};
-		if (value.try_object() == nullptr) value = cppon{ object_t{} };
-	}
-	return visitor(value, newIndex);
+    return vivify(value, newIndex);
 }
 
 /**
@@ -383,9 +332,10 @@ inline cppon& visitor(cppon& object, size_t index) {
 			return visitor(arg, index);
         if constexpr (std::is_same_v<type, nullptr_t>) {
             // autovivify the root as an object if it is null
-            if (object.try_object()) throw type_mismatch_error{};
-            if (object.try_array() == nullptr) object = cppon{ array_t{} };
-            return visitor(std::get<array_t>(object), index);
+            object = cppon{ array_t{} };
+            auto& arr = std::get<array_t>(object);
+            arr.reserve(array_min_reserve);
+            return visitor(arr, index);
         }
         throw type_mismatch_error{};
     }, static_cast<value_t&>(object));
@@ -457,23 +407,30 @@ inline cppon& visitor(cppon& object, string_view_t index) {
             return visitor(arg, index);
         if constexpr (std::is_same_v<type, nullptr_t>) {
             // autovivify the root as an object if it is null
-            auto next{ index.find('/') };
-            auto key = index.substr(0, next); // key is a name
-            if (all_digits(key)) {
-                // next key is a number
-                if (object.try_object()) throw type_mismatch_error{};
-                if (object.try_array() == nullptr) object = cppon{ array_t{} };
-                return visitor(std::get<array_t>(object), index);
-            }
-            else {
-                // next key is a string
-                if (object.try_array()) throw type_mismatch_error{};
-                if (object.try_object() == nullptr) object = cppon{ object_t{} };
-                return visitor(std::get<object_t>(object), index);
-            }
+            return vivify(object, index);
         }
         throw type_mismatch_error{};
     }, static_cast<value_t&>(object));
+}
+
+inline cppon& vivify(cppon& slot, string_view_t key) {
+    if (all_digits(key.substr(0, key.find('/')))) {
+        // next key is a number
+        if (slot.try_object()) throw type_mismatch_error{};
+        if (slot.try_array() == nullptr) slot = cppon{ array_t{} };
+        auto& arr = std::get<array_t>(slot);
+        arr.reserve(array_min_reserve);
+        return visitor(arr, key);
+    }
+    else {
+        // next key is a string
+        if (slot.try_array()) throw type_mismatch_error{};
+        if (slot.try_object() == nullptr) slot = cppon{ object_t{} };
+        auto& obj = std::get<object_t>(slot);
+        obj.reserve(object_min_reserve);
+        return visitor(obj, key);
+    }
+
 }
 
 /**
@@ -567,7 +524,7 @@ inline const blob_t& get_blob(const cppon& value) {
  */
 template<typename T>
 T get_strict(cppon& value) {
-    static_assert(std::is_arithmetic_v<T>, "T must be a numeric type");
+    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, pointer_t> || std::is_same_v<T, number_t>, "T must be a numeric type");
     return std::visit([&](auto&& arg) -> T {
         using type = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<type, path_t>) {
@@ -577,6 +534,11 @@ T get_strict(cppon& value) {
             return get_strict<T>(*arg);
         }
         else if constexpr (std::is_same_v<type, number_t>) {
+            if (thread::exact_number_mode) {
+                auto copy = value;
+                convert_to_numeric(copy);
+                return get_strict<T>(copy);
+            }
             convert_to_numeric(value);
             return get_strict<T>(value);
         }
@@ -591,7 +553,7 @@ T get_strict(cppon& value) {
 
 template<typename T>
 T get_strict(const cppon& value) {
-    static_assert(std::is_arithmetic_v<T>, "T must be a numeric type");
+    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, pointer_t> || std::is_same_v<T, number_t>, "T must be a numeric type");
     return std::visit([&](const auto& arg) -> T {
         using type = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<type, path_t>) {
@@ -601,6 +563,11 @@ T get_strict(const cppon& value) {
             return get_strict<T>(*arg);
         }
         else if constexpr (std::is_same_v<type, number_t>) {
+            if (thread::exact_number_mode) {
+                auto copy = value;
+                convert_to_numeric(copy);
+                return get_strict<T>(copy);
+            }
             throw number_not_converted_error{};
         }
         else if constexpr (std::is_same_v<type, T>) {
@@ -630,7 +597,7 @@ T get_strict(const cppon& value) {
  */
 template<typename T>
 T get_cast(cppon& value) {
-    static_assert(std::is_arithmetic_v<T>, "T must be a numeric type");
+    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, pointer_t> || std::is_same_v<T, number_t>, "T must be a numeric type");
     return std::visit([&](auto&& arg) -> T {
         using type = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<type, path_t>) {
@@ -640,6 +607,11 @@ T get_cast(cppon& value) {
             return get_cast<T>(*arg);
         }
         else if constexpr (std::is_same_v<type, number_t>) {
+            if (thread::exact_number_mode) {
+                auto copy = value;
+                convert_to_numeric(copy);
+                return get_cast<T>(copy);
+            }
             convert_to_numeric(value);
             return get_cast<T>(value);
         }
@@ -654,7 +626,7 @@ T get_cast(cppon& value) {
 
 template<typename T>
 T get_cast(const cppon& value) {
-    static_assert(std::is_arithmetic_v<T>, "T must be a numeric type");
+    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, pointer_t> || std::is_same_v<T, number_t>, "T must be a numeric type");
     return std::visit([&](auto&& arg) -> T {
         using type = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<type, path_t>) {
@@ -664,6 +636,11 @@ T get_cast(const cppon& value) {
             return get_cast<T>(*arg);
         }
         else if constexpr (std::is_same_v<type, number_t>) {
+            if (thread::exact_number_mode) {
+                auto copy = value;
+                convert_to_numeric(copy);
+                return get_cast<T>(copy);
+            }
             throw number_not_converted_error{};
         }
         else if constexpr (std::is_arithmetic_v<type>) {
@@ -685,6 +662,15 @@ constexpr T* get_optional(cppon& value) noexcept {
         else if constexpr (std::is_same_v<type, pointer_t>) {
             return get_optional<T>(*arg);
         }
+        else if constexpr (std::is_same_v<type, number_t>) {
+            if (thread::exact_number_mode) {
+                auto copy = value;
+                convert_to_numeric(copy);
+                return get_optional<T>(copy);
+            }
+            convert_to_numeric(value);
+            return get_optional<T>(value);
+        }
         else {
             return std::get_if<T>(&value);
         }
@@ -700,6 +686,14 @@ constexpr const T* get_optional(const cppon& value) noexcept {
         }
         else if constexpr (std::is_same_v<type, pointer_t>) {
             return get_optional<T>(*arg);
+        }
+        else if constexpr (std::is_same_v<type, number_t>) {
+            if (thread::exact_number_mode) {
+                auto copy = value;
+                convert_to_numeric(copy);
+                return get_optional<T>(copy);
+            }
+            throw number_not_converted_error{};
         }
         else {
             return std::get_if<T>(&value);

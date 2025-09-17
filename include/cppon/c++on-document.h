@@ -10,7 +10,6 @@
  * See LICENSE file for complete license details
  */
 
-
 #ifndef CPPON_DOCUMENT_H
 #define CPPON_DOCUMENT_H
 
@@ -34,11 +33,13 @@ class document : public cppon {
 
     void eval_and_assign(const options parse_mode) {
         static_cast<cppon&>(*this) = ch5::eval(_buffer, parse_mode);
-        visitors::push_root(*this);
+        roots::push_root(*this);
     }
 
 public:
     document() = default;
+
+    explicit document(nullptr_t) : cppon{ nullptr } {}
 
     // Construct + eval (copies text)
     explicit document(const char* text, const options opt = Quick) {
@@ -155,14 +156,17 @@ public:
 
     // Load file (noexcept, returns invalid document on failure)
     static document from_file(const std::string& filename, std::string& error, const options opt = Quick) noexcept {
-        try {
-            return from_file(filename, opt);
+        std::ifstream in(filename, std::ios::binary);
+        if (in) {
+            in.seekg(0, std::ios::end);
+            std::string buf(static_cast<size_t>(in.tellg()), 0x00);
+            in.seekg(0, std::ios::beg);
+            in.read(buf.data(), static_cast<std::streamsize>(buf.size()));
+            if (in) return document{ std::move(buf), opt };
+            error = "Failed to read from file: " + filename;
         }
-        catch(const std::exception& e) {
-            error = e.what();
-            document doc; static_cast<cppon&>(doc) = nullptr; // invalid document
-            return doc;
-        }
+		else error = "Failed to open file: " + filename;
+        return document{ nullptr };
     }
 };
 

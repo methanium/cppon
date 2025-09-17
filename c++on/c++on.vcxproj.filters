@@ -62,6 +62,9 @@
     <Filter Include="c++on-repo\templates\headers\platform">
       <UniqueIdentifier>{9c9ca007-eb0f-4368-9f02-fa8f4c5b699a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="c++on-repo\draft">
+      <UniqueIdentifier>{b7fb1ab3-ccb8-4d42-958e-bb2c5767432f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="c++on.cpp">
@@ -167,6 +170,21 @@
     </ClInclude>
     <ClInclude Include="..\templates\headers\cppon\c++on-document.tmpl">
       <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-config.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-roots.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-printer-state.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-thread.h">
+      <Filter>c++on-repo\include\cppon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cppon\c++on-swar.h">
+      <Filter>c++on-repo\include\cppon</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -313,6 +331,75 @@
     </None>
     <None Include="..\docs\DOCUMENT.md">
       <Filter>c++on-repo\docs</Filter>
+    </None>
+    <None Include="..\draft\01_INTRODUCTION.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\02_GETTING_STARTED.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\03_CORE_CONCEPTS.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\04_DATA_NAVIGATION.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\05_CREATING_MODIFYING.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\06_TYPE_HANDLING.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\07_PATHS_REFERENCES.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\08_BLOBS_ENCODING.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\09_PRINTING_FORMATTING.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\10_ALLOCATION_STRATEGIES.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\11_ERROR_HANDLING.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\12_PERFORMANCE_TIPS.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\13_API_REFERENCE.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\14_COMPARISON.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\15_EXAMPLES.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\16_INTERNALS.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\17_CONFIGURATION.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\draft\18_MIGRATION.md">
+      <Filter>c++on-repo\draft</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-config.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-printer-state.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-roots.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-swar.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
+    </None>
+    <None Include="..\templates\headers\cppon\c++on-thread.tmpl">
+      <Filter>c++on-repo\templates\headers\cppon</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

@@ -62,26 +62,27 @@ namespace ch5 {
  * dynamically linked, accessed, and manipulated within a coherent and stable framework.
  */
 
-namespace visitors {
+namespace roots {
 void push_root(const cppon& root);
 void pop_root(const cppon& root) noexcept;
 cppon& get_root() noexcept;
-
+}//namespace roots
+namespace visitors {
 cppon& visitor(cppon& object, size_t index);
 cppon& visitor(cppon& object, string_view_t index);
 const cppon& visitor(const cppon& object, size_t index);
 const cppon& visitor(const cppon& object, string_view_t index);
-} //namespace visitors
+}//namespace visitors
 
 class root_guard {
     cppon& new_root;
 public:
     root_guard(const cppon& new_root_arg) noexcept
         : new_root(const_cast<cppon&>(new_root_arg)) {
-        visitors::push_root(new_root);
+        roots::push_root(new_root);
     }
     ~root_guard() noexcept {
-        visitors::pop_root(new_root);
+        roots::pop_root(new_root);
     }
 };
 
@@ -90,7 +91,7 @@ template<typename T, typename Variant>
 struct is_in_variant_rv;
 
 template<typename T, typename... Types>
-struct is_in_variant_rv<T, std::variant<Types...>> 
+struct is_in_variant_rv<T, std::variant<Types...>>
     : std::disjunction<std::is_same<std::decay_t<T>, Types>..., std::is_rvalue_reference<T>> {};
 
 // Type trait to check if a type is contained in a std::variant and is an l-value reference
@@ -98,7 +99,7 @@ template<typename T, typename Variant>
 struct is_in_variant_lv;
 
 template<typename T, typename... Types>
-struct is_in_variant_lv<T, std::variant<Types...>> 
+struct is_in_variant_lv<T, std::variant<Types...>>
     : std::disjunction<std::is_same<std::decay_t<T>, Types>..., std::negation<std::is_rvalue_reference<T>>> {};
 
 /**
@@ -128,7 +129,7 @@ public:
     cppon() = default;
     cppon(const cppon&) = default;
     cppon(cppon&&) noexcept = default;
-    ~cppon() noexcept { visitors::pop_root(*this); }
+    ~cppon() noexcept { roots::pop_root(*this); }
     cppon& operator=(const cppon&) = default;
     cppon& operator=(cppon&&) noexcept = default;
 
@@ -148,52 +149,52 @@ public:
         }
         return true;
     }
-    inline bool ensure_valid() const {
+    inline void ensure_valid() const {
         if (!check_valid()) throw object_reference_lost_error{ "Object is in valueless_by_exception state" };
     }
 
-    auto is_null() const -> bool {
+    inline auto is_null() const -> bool {
         ensure_valid();
         return std::holds_alternative<nullptr_t>(*this);
     }
 
-    auto operator[](string_view_t index)->cppon& {
+    inline auto operator[](string_view_t index)->cppon& {
         ensure_valid();
         CPPON_ASSERT(!index.empty() && "Index cannot be empty");
         if (index.front() == '/') {
-            visitors::push_root(*this);
-            return visitors::visitor(visitors::get_root(), index.substr(1));
+            roots::push_root(*this);
+            return visitors::visitor(roots::get_root(), index.substr(1));
         }
         return visitors::visitor(*this, index);
     }
 
-    auto operator[](string_view_t index)const->const cppon& {
+    inline auto operator[](string_view_t index)const->const cppon& {
         ensure_valid();
         CPPON_ASSERT(!index.empty() && "Index cannot be empty");
         if (index.front() == '/') {
-            visitors::push_root(*this);
-            return visitors::visitor(static_cast<const cppon&>(visitors::get_root()), index.substr(1));
+            roots::push_root(*this);
+            return visitors::visitor(static_cast<const cppon&>(roots::get_root()), index.substr(1));
         }
         return visitors::visitor(*this, index);
     }
 
-    auto operator[](size_t index)->cppon& {
+    inline auto operator[](size_t index)->cppon& {
         ensure_valid();
         return visitors::visitor(*this, index);
     }
 
-    auto operator[](size_t index)const->const cppon& {
+    inline auto operator[](size_t index)const->const cppon& {
         ensure_valid();
         return visitors::visitor(*this, index);
     }
 
-    auto& operator=(const char* val) {
+    inline auto& operator=(const char* val) {
         ensure_valid();
         value_t::operator=(string_view_t{ val });
         return *this;
     }
 
-    auto& operator=(pointer_t pointer) {
+    inline auto& operator=(pointer_t pointer) {
         ensure_valid();
         if (pointer && pointer->valueless_by_exception()) {
             throw unsafe_pointer_assignment_error(
@@ -208,8 +209,8 @@ public:
     // Template for lvalue references, disabled for types not contained in value_t
     template<
         typename T,
-        typename std::enable_if<is_in_variant_lv<const T, value_t>::value, int>::type = 0>
-    auto& operator=(const T& val) {
+        typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+    inline auto& operator=(const T& val) {
         ensure_valid();
         value_t::operator=(val); return *this;
     }
@@ -217,46 +218,90 @@ public:
     // Template for rvalue references, disabled for types not contained in value_t
     template<
         typename T,
-        typename std::enable_if<is_in_variant_rv<T, value_t>::value, int>::type = 0>
-    auto& operator=(T&& val) {
+        typename = std::enable_if_t<is_in_variant_rv<T, value_t>::value>>
+    inline auto& operator=(T&& val) {
         ensure_valid();
         value_t::operator=(std::forward<T>(val)); return *this;
     }
 
     // Underlying container access (throws type_mismatch_error on wrong type)
-    auto array() -> array_t& {
+    inline auto array() -> array_t& {
         ensure_valid();
         if (auto p = std::get_if<array_t>(this)) return *p;
         throw type_mismatch_error{ "array_t expected" };
     }
-    auto array() const -> const array_t& {
+    inline auto array() const -> const array_t& {
         ensure_valid();
         if (auto p = std::get_if<array_t>(this)) return *p;
         throw type_mismatch_error{ "array_t expected" };
     }
-    auto object() -> object_t& {
+    inline auto object() -> object_t& {
         ensure_valid();
         if (auto p = std::get_if<object_t>(this)) return *p;
         throw type_mismatch_error{ "object_t expected" };
     }
-    auto object() const -> const object_t& {
+    inline auto object() const -> const object_t& {
         ensure_valid();
         if (auto p = std::get_if<object_t>(this)) return *p;
         throw type_mismatch_error{ "object_t expected" };
     }
 
     // Optional non-throw helpers
-    auto try_array() noexcept -> array_t* { return check_valid() ? std::get_if<array_t>(this) : nullptr; }
-    auto try_array() const noexcept -> const array_t* { return check_valid() ? std::get_if<array_t>(this) : nullptr; }
-    auto try_object() noexcept -> object_t* { return check_valid() ? std::get_if<object_t>(this) : nullptr; }
-    auto try_object() const noexcept -> const object_t* { return check_valid() ? std::get_if<object_t>(this) : nullptr; }
+    inline auto try_array() noexcept -> array_t* { return check_valid() ? std::get_if<array_t>(this) : nullptr; }
+    inline auto try_array() const noexcept -> const array_t* { return check_valid() ? std::get_if<array_t>(this) : nullptr; }
+    inline auto try_object() noexcept -> object_t* { return check_valid() ? std::get_if<object_t>(this) : nullptr; }
+    inline auto try_object() const noexcept -> const object_t* { return check_valid() ? std::get_if<object_t>(this) : nullptr; }
 
     // Array iteration
-    auto begin() { return array().begin(); }
-    auto end() { return array().end(); }
-    auto begin() const{ return array().begin(); }
-    auto end() const { return array().end(); }
+    inline auto begin() { return array().begin(); }
+    inline auto end() { return array().end(); }
+    inline auto begin() const{ return array().begin(); }
+    inline auto end() const { return array().end(); }
 };
+
+template<
+    typename T,
+    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+inline bool operator==(const cppon& lhs, const T& rhs) noexcept {
+    if (lhs.valueless_by_exception())
+        return false;
+
+    // Vérifier si le type stocké correspond à T
+    const T* val = std::get_if<T>(&lhs);
+    if (!val)
+        return false;
+
+    // Comparer les valeurs
+    return *val == rhs;
+}
+template<
+    typename T,
+    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+inline bool operator==(const T& lhs, const cppon& rhs) noexcept {
+    if (rhs.valueless_by_exception())
+        return false;
+
+    // Vérifier si le type stocké correspond à T
+    const T* val = std::get_if<T>(&rhs);
+    if (!val)
+        return false;
+
+    // Comparer les valeurs
+    return lhs == *val;
+}
+
+template<
+    typename T,
+    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+inline bool operator!=(const cppon& lhs, const T& rhs) noexcept {
+    return !(lhs == rhs);
+}
+template<
+    typename T,
+    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+inline bool operator!=(const T& lhs, const cppon& rhs) noexcept {
+    return !(lhs == rhs);
+}
 
 #ifdef CPPON_ENABLE_STD_GET_INJECTION
 using std::get_if;

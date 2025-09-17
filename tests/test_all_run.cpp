@@ -218,7 +218,7 @@ int main() {
 	std::cout << "\n=== Test thread-local root stacks and isolation between threads (should not throw) ===\n\n";
 
     run("thread-local roots do not interfere", [] {
-        const auto d0 = visitors::root_stack().size();
+        const auto d0 = roots::root_stack().size();
 
         std::thread th([] {
             // Absolute path -> push_root(*this) via operator[]
@@ -228,23 +228,23 @@ int main() {
         th.join();
 
 		// Current thread's stack didn't change
-        EXPECT_EQ(visitors::root_stack().size(), d0);
+        EXPECT_EQ(roots::root_stack().size(), d0);
         }, true);
 
     run("two threads isolated root stacks", [] {
-        const auto main_d0 = visitors::root_stack().size();
+        const auto main_d0 = roots::root_stack().size();
 
         std::exception_ptr e1, e2;
 
         std::thread t1([&] {
             try {
-                const auto d0 = visitors::root_stack().size();
+                const auto d0 = roots::root_stack().size();
                 for (int i = 0; i < 64; ++i) {
                     auto v = eval(R"({"a":{"b":1},"arr":[0,1,2]})", options::quick);
                     (void)get_cast<int>(v["/a/b"]);
                     (void)get_cast<int>(v["/arr/2"]);
                 }
-                if (visitors::root_stack().size() != d0)
+                if (roots::root_stack().size() != d0)
                     throw std::runtime_error("root stack leak in t1");
             }
             catch (...) {
@@ -254,13 +254,13 @@ int main() {
 
         std::thread t2([&] {
             try {
-                const auto d0 = visitors::root_stack().size();
+                const auto d0 = roots::root_stack().size();
                 for (int i = 0; i < 64; ++i) {
                     auto v = eval(R"({"x":1,"r":"$cppon-path:/x"})", options::quick);
                     (void)get_cast<int>(v["/x"]);
                     (void)get_cast<int>(v["/r"]); // path deref -> push/pop root via traversal
                 }
-                if (visitors::root_stack().size() != d0)
+                if (roots::root_stack().size() != d0)
                     throw std::runtime_error("root stack leak in t2");
             }
             catch (...) {
@@ -275,7 +275,7 @@ int main() {
         if (e2) std::rethrow_exception(e2);
 
 		// Main thread's stack didn't change
-        EXPECT_EQ(visitors::root_stack().size(), main_d0);
+        EXPECT_EQ(roots::root_stack().size(), main_d0);
         }, true);
 
     std::cout << "\n=== Test exceptions from path traversal and pointer assignment ===\n\n";
@@ -317,7 +317,31 @@ int main() {
     run("unsafe_pointer_assignment_error", [] {
         cppon doc;
         doc["/a"] = 42; // target
+        doc["/b"] = &doc["/a"];
+        doc["/c"] = &doc["/a"];
+        doc["/d"] = &doc["/a"];
+        doc["/e"] = &doc["/a"];
+        doc["/f"] = &doc["/a"];
+        doc["/g"] = &doc["/a"];
+        doc["/h"] = &doc["/a"];
+		doc["/i"] = &doc["/a"]; // <- should throw here because of container reallocation (address of 'a' becomes invalid)
+        doc["/j"] = &doc["/a"];
+        doc["/k"] = &doc["/a"];
+        doc["/l"] = &doc["/a"];
+        doc["/m"] = &doc["/a"];
+        doc["/n"] = &doc["/a"];
+        doc["/o"] = &doc["/a"];
         doc["/p"] = &doc["/a"];
+        doc["/q"] = &doc["/a"];
+        doc["/r"] = &doc["/a"];
+        doc["/s"] = &doc["/a"];
+        doc["/t"] = &doc["/a"];
+        doc["/u"] = &doc["/a"];
+        doc["/v"] = &doc["/a"];
+        doc["/w"] = &doc["/a"];
+        doc["/x"] = &doc["/a"];
+        doc["/y"] = &doc["/a"];
+        doc["/z"] = &doc["/a"];
         });
 
     // Safe pattern: sequence slot creation then pointer_t assignment
@@ -330,6 +354,105 @@ int main() {
         const auto& p = doc["/p"];  // pointer dereferenced immediately: result = 42
         if (!std::holds_alternative<pointer_t>(p) || std::get<pointer_t>(p) != &doc["/a"])
             throw std::runtime_error("pointer mismatch");
+        }, true);
+
+    std::cout << "\n=== Test config system ===\n\n";
+
+    run("config defaults initialization", [] {
+        // Vérifie que les valeurs par défaut sont correctement initialisées
+        EXPECT_EQ(get_config("parser/prefix/path"), string_view_t{ CPPON_PATH_PREFIX });
+        EXPECT_EQ(get_config("parser/prefix/blob"), string_view_t{ CPPON_BLOB_PREFIX });
+        EXPECT_EQ(get_config("parser/prefix/number"), string_view_t{ CPPON_NUMBER_PREFIX });
+        EXPECT_EQ(get_config("parser/exact"), false);
+        EXPECT_EQ(get_exact_number_mode(), false);
+        }, true);
+
+    run("config set and get", [] {
+        // Mémorise les valeurs actuelles
+        auto old_path = get_config("parser/prefix/path");
+        auto old_exact = get_exact_number_mode();
+
+        // Modifie les valeurs
+        set_config("parser/prefix/path", "$test-path:");
+        set_exact_number_mode(true);
+
+        // Vérifie que les valeurs ont été modifiées
+        EXPECT_EQ(get_config("parser/prefix/path"), string_view_t{ "$test-path:" });
+        EXPECT_EQ(get_exact_number_mode(), true);
+
+        // Restaure les valeurs d'origine
+        set_config("parser/prefix/path", old_path);
+        set_exact_number_mode(old_exact);
+        }, true);
+
+    run("config thread isolation", [] {
+        // Modifie la valeur dans le thread principal
+        set_exact_number_mode(true);
+
+        bool thread_has_isolated_config = false;
+        std::thread t([&thread_has_isolated_config] {
+            // Dans un thread séparé, la valeur doit être la valeur par défaut
+            thread_has_isolated_config = (get_exact_number_mode() == false);
+
+            // Modification dans ce thread ne doit pas affecter le thread principal
+            set_exact_number_mode(false);
+            });
+        t.join();
+
+        // Vérifie que les threads ont bien des configurations isolées
+        EXPECT_TRUE(thread_has_isolated_config);
+        EXPECT_TRUE(get_exact_number_mode());
+
+        // Restaure la valeur par défaut
+        set_exact_number_mode(false);
+        }, true);
+
+    run("config affects parser behavior", [] {
+        // Test avec exact_number_mode = false (défaut)
+        set_exact_number_mode(false);
+        auto doc1 = eval("42.5", options::full);
+        EXPECT_TRUE(std::holds_alternative<double_t>(doc1));
+
+        // Test avec exact_number_mode = true
+        set_exact_number_mode(true);
+        auto doc2 = eval("42.5", options::full);
+        EXPECT_TRUE(std::holds_alternative<number_t>(doc2));
+
+        // Restaure la valeur par défaut
+        set_exact_number_mode(false);
+        }, true);
+
+    run("config dirty flag mechanism", [] {
+        // Test que la mise à jour est déclenchée correctement
+        auto& cfg = static_cast<config&>(Config);
+
+        // Modifie directement une valeur sans passer par operator=
+        static_cast<cppon&>(cfg["parser/exact"]) = true;
+
+        // Vérifie que le dirty flag est bien mis à jour lors de l'accès
+        cfg["parser/exact"];
+
+        // Force la mise à jour (normalement déclenchée par operator=)
+        cfg.update();
+
+        // Vérifie que la modification a bien été appliquée
+        EXPECT_TRUE(get_exact_number_mode());
+
+        // Restaure la valeur par défaut
+        set_exact_number_mode(false);
+        }, true);
+
+    run("config SIMD settings", [] {
+        // Mémorise les valeurs actuelles
+        auto old_level = effective_simd_level();
+
+        // Test des overrides SIMD
+        // set_effective_simd_level(SimdLevel::None);
+        set_thread_simd_override(SimdLevel::None);
+        EXPECT_EQ(effective_simd_level(), SimdLevel::None);
+
+        clear_thread_simd_override();
+        EXPECT_EQ(effective_simd_level(), old_level);
         }, true);
 
     return test_succeeded();

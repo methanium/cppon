@@ -1,0 +1,158 @@
+/*
+ * C++ON - High performance C++17 JSON parser with extended features
+ * https://github.com/methanium/cppon
+ *
+ * File: c++on-thread.h : C++ON thread local state and SIMD utilities
+ *
+ * MIT License
+ * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
+ *
+ * See LICENSE file for complete license details
+ */
+
+#ifndef CPPON_THREAD_H
+#define CPPON_THREAD_H
+
+[[@UBER ? "" : "c++on-types.h"]]
+[[@UBER ? "" : "c++on-printer-state.h"]]
+
+#if CPPON_USE_SIMD
+[[@UBER ? "" : "../platform/processor_features_info.h"]]
+[[@UBER ? @STDCAPTURE : <atomic>]]
+#endif
+
+namespace ch5 {
+enum class SimdLevel {
+    None,
+    SSE,
+    AVX2,
+    AVX512
+};
+
+#if CPPON_USE_SIMD
+namespace scanner {
+using find_quote_fn = size_t(*)(std::string_view, size_t);
+using scan_digits_fn = const char* (*)(std::string_view, size_t);
+inline void ensure_dispatch_bound() noexcept;
+inline find_quote_fn bind_find_quote_pos(SimdLevel lvl) noexcept;
+inline scan_digits_fn bind_parallel_digits(SimdLevel lvl) noexcept;
+}
+#endif
+
+#if CPPON_USE_SIMD
+namespace global {
+inline static std::atomic<int> g_simd_override_global{ -1 };
+}
+#endif
+
+namespace thread {
+
+template<typename T>
+struct config_var {
+    cppon current;
+    config_var(const T& v) : current{ v } {}
+    operator T& () { return std::get<T>(current); }
+    operator const T& () const { return std::get<T>(current); }
+};
+
+inline SimdLevel effective_simd_level() noexcept;
+
+inline namespace storage {
+inline static thread_local std::vector<cppon*> stack{ nullptr }; // stack first
+inline static thread_local cppon null{ nullptr }; // null second
+inline static thread_local printer_state::state printer;
+#if CPPON_USE_SIMD
+inline static thread_local SimdLevel max_simd_level = ([]() noexcept -> SimdLevel {
+    platform::processor_features_info cpu_info;
+    auto features = cpu_info.cpu_features();
+    if (features.AVX512F) return SimdLevel::AVX512;
+    if (features.AVX2)    return SimdLevel::AVX2;
+    if (features.SSE4_2)  return SimdLevel::SSE;
+    return SimdLevel::None;
+    })();
+inline static thread_local scanner::find_quote_fn p_find_quote = scanner::bind_find_quote_pos(max_simd_level);
+inline static thread_local scanner::scan_digits_fn p_scan_digits = scanner::bind_parallel_digits(max_simd_level);
+#else
+inline static thread_local SimdLevel max_simd_level = SimdLevel::None;
+#endif
+inline static thread_local config_var<int64_t> object_min_reserve{ CPPON_OBJECT_MIN_RESERVE };
+inline static thread_local config_var<int64_t> array_min_reserve{ CPPON_ARRAY_MIN_RESERVE };
+inline static thread_local config_var<int64_t> printer_reserve_per_element{ CPPON_PRINTER_RESERVE_PER_ELEMENT };
+inline static thread_local config_var<string_view_t> path_prefix{ CPPON_PATH_PREFIX };
+inline static thread_local config_var<string_view_t> blob_prefix{ CPPON_BLOB_PREFIX };
+inline static thread_local config_var<string_view_t> number_prefix{ CPPON_NUMBER_PREFIX };
+inline static thread_local config_var<int64_t> simd_override_thread{ (int64_t)-1 };
+inline static thread_local config_var<int64_t> simd_default{ (int64_t)effective_simd_level() };
+inline static thread_local config_var<boolean_t> exact_number_mode{ false };
+}
+
+inline static auto& get_printer_state() noexcept {
+    return printer;
+}
+
+#if CPPON_USE_SIMD
+// Global process-wide override; -1 = none
+inline SimdLevel cap_to_supported(SimdLevel lvl) noexcept {
+    return (static_cast<int>(lvl) <= static_cast<int>(max_simd_level)) ? lvl : max_simd_level;
+}
+inline void set_simd_override_global(SimdLevel lvl) noexcept {
+    global::g_simd_override_global.store(static_cast<int>(cap_to_supported(lvl)), std::memory_order_relaxed);
+    scanner::ensure_dispatch_bound();
+}
+inline void clear_simd_override_global() noexcept {
+    global::g_simd_override_global.store(-1, std::memory_order_relaxed);
+    scanner::ensure_dispatch_bound();
+}
+inline void set_simd_override_thread(SimdLevel lvl) noexcept {
+    simd_override_thread = static_cast<int>(cap_to_supported(lvl));
+    scanner::ensure_dispatch_bound();
+}
+inline void clear_simd_override_thread() noexcept {
+    simd_override_thread = -1;
+    scanner::ensure_dispatch_bound();
+}
+inline bool has_simd_override() noexcept {
+    return simd_override_thread >= 0 || global::g_simd_override_global.load(std::memory_order_relaxed) >= 0;
+}
+inline SimdLevel current_simd_override() noexcept {
+    if (simd_override_thread >= 0)
+        return static_cast<SimdLevel>(static_cast<int64_t>(simd_override_thread));
+    int v = global::g_simd_override_global.load(std::memory_order_relaxed);
+    return v < 0 ? SimdLevel::None : static_cast<SimdLevel>(v);
+}
+inline SimdLevel detect_simd_level() noexcept {
+    if (has_simd_override()) { // Honor override first
+        return cap_to_supported(current_simd_override());
+    }
+    return max_simd_level;
+}
+
+// Public export of SIMD override helpers at ch5 scope
+inline void set_global_simd_override(SimdLevel lvl) noexcept {
+    set_simd_override_global(lvl);
+}
+inline void clear_global_simd_override() noexcept {
+    clear_simd_override_global();
+}
+inline void set_thread_simd_override(SimdLevel lvl) noexcept {
+    set_simd_override_thread(lvl);
+}
+inline void clear_thread_simd_override() noexcept {
+    clear_simd_override_thread();
+}
+inline SimdLevel effective_simd_level() noexcept {
+    return detect_simd_level();
+}
+#else
+// No-SIMD build: keep API stable with no-op stubs
+inline void set_global_simd_override(SimdLevel) noexcept {}
+inline void clear_global_simd_override() noexcept {}
+inline void set_thread_simd_override(SimdLevel) noexcept {}
+inline void clear_thread_simd_override() noexcept {}
+inline SimdLevel effective_simd_level() noexcept { return SimdLevel::None; }
+#endif
+
+} // namespace thread
+} // namespace ch5
+
+#endif // CPPON_THREAD_H

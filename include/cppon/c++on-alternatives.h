@@ -161,6 +161,27 @@ using value_t = std::variant<
     pointer_t,     // 19
     nullptr_t>;    // 20
 
+inline bool operator==(const number_t& lhs, const number_t& rhs) noexcept {
+    return lhs.value == rhs.value;
+}
+inline bool operator!=(const number_t& lhs, const number_t& rhs) noexcept {
+    return !(lhs == rhs);
+}
+
+inline bool operator==(const path_t& lhs, const path_t& rhs) noexcept {
+    return lhs.value == rhs.value;
+}
+inline bool operator!=(const path_t& lhs, const path_t& rhs) noexcept {
+    return !(lhs == rhs);
+}
+
+inline bool operator==(const blob_string_t& lhs, const blob_string_t& rhs) noexcept {
+    return lhs.value == rhs.value;
+}
+inline bool operator!=(const blob_string_t& lhs, const blob_string_t& rhs) noexcept {
+    return !(lhs == rhs);
+}
+
 /**
  * @brief Encodes a blob into a base64 string.
  *

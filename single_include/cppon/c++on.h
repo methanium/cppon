@@ -81,6 +81,10 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
 #define CPPON_BLOB_PREFIX "$cppon-blob:"
 #endif
 
+#ifndef CPPON_NUMBER_PREFIX
+#define CPPON_NUMBER_PREFIX "$cppon-number:"
+#endif
+
 #ifndef CPPON_MAX_ARRAY_DELTA
 #define CPPON_MAX_ARRAY_DELTA 256
 #endif
@@ -120,6 +124,7 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
@@ -2805,6 +2810,27 @@ using value_t = std::variant<
     pointer_t,     // 19
     nullptr_t>;    // 20
 
+inline bool operator==(const number_t& lhs, const number_t& rhs) noexcept {
+    return lhs.value == rhs.value;
+}
+inline bool operator!=(const number_t& lhs, const number_t& rhs) noexcept {
+    return !(lhs == rhs);
+}
+
+inline bool operator==(const path_t& lhs, const path_t& rhs) noexcept {
+    return lhs.value == rhs.value;
+}
+inline bool operator!=(const path_t& lhs, const path_t& rhs) noexcept {
+    return !(lhs == rhs);
+}
+
+inline bool operator==(const blob_string_t& lhs, const blob_string_t& rhs) noexcept {
+    return lhs.value == rhs.value;
+}
+inline bool operator!=(const blob_string_t& lhs, const blob_string_t& rhs) noexcept {
+    return !(lhs == rhs);
+}
+
 /**
  * @brief Encodes a blob into a base64 string.
  *
@@ -3000,7 +3026,7 @@ inline void convert_to_numeric(value_t& value) {
  * C++ON - High performance C++17 JSON parser with extended features
  * https://github.com/methanium/cppon
  *
- * File: c++on-types.h : Core type definitions
+ * File: c++on-printer-state.h : C++ON Printer State Management
  *
  * MIT License
  * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
@@ -3008,982 +3034,40 @@ inline void convert_to_numeric(value_t& value) {
  * See LICENSE file for complete license details
  */
 
-#ifndef CPPON_TYPES_H
-#define CPPON_TYPES_H
+#ifndef CPPON_PRINTER_STATE_H
+#define CPPON_PRINTER_STATE_H
 
 namespace ch5 {
+namespace printer_state {
 
-/**
- * @brief Central utilities for managing cppon objects and their interconnections.
- *
- * This suite of utility functions is foundational to the cppon framework. It manages the current root
- * context using a thread-local stack, provides a per-thread null sentinel, and enables consistent path
- * resolution across nested traversals while keeping threads isolated.
- *
- * - Root stack and accessors:
- *   - `push_root(const cppon&)` and `pop_root(const cppon&)`: Maintain a thread-local stack of roots.
- *     push_root() pushes the given object if it is not already at the top; pop_root() pops it only if
- *     it is the current top. This guarantees balanced push/pop in scoped contexts.
- *   - `get_root()`: Returns a reference to the current root. Asserts that the stack is non-empty and
- *     the top is non-null. Use this when resolving absolute paths or path_t values.
- *   - `root_guard`: RAII helper that pushes a root on construction and pops it on destruction, ensuring
- *     exception-safe stack balancing.
- *
- * - Invariants:
- *   - The root stack is thread_local and never empty (the bottom entry is a per-thread null sentinel).
- *   - The top entry must never be nullptr (enforced by assertions).
- *   - Each root must be unique within the stack (no duplicates allowed).
- *
- * - Absolute paths and operator[]:
- *   - When an index starts with '/', operator[] calls push_root(*this) and resolves the remainder of the
- *     path against `get_root()`. Prefer `root_guard` when switching the root for a scope.
- *
- * - `visitor(cppon&, size_t)`, `visitor(cppon&, string_view_t)`, `visitor(const cppon&, size_t)`, and
- *   `visitor(const cppon&, string_view_t)`: Provide mechanisms to access cppon objects by numeric index
- *   or string path. Resolution of `path_t` segments is performed against the current root.
- *
- * - Threading:
- *   - The root stack is per-thread (`thread_local`). Root changes are not visible across threads and
- *     do not require external synchronization.
- *
- * @note Lifetime: `cppon::~cppon()` calls `pop_root(*this)` to keep the stack consistent in the presence
- *       of temporaries or scoped objects.
- *
- * @warning Call `pop_root` only when you own the current top (typically via `root_guard` or the owning
- *          object's lifetime). Do not attempt to manually pop non-top entries.
- *
- * Collectively, these utilities underscore the cppon framework's flexibility, robustness, and capability to represent
- * and manage complex data structures and relationships. They are instrumental in ensuring that cppon objects can be
- * dynamically linked, accessed, and manipulated within a coherent and stable framework.
- */
+typedef std::unordered_set<std::string_view> string_set_t;
 
-namespace visitors {
-void push_root(const cppon& root);
-void pop_root(const cppon& root) noexcept;
-cppon& get_root() noexcept;
-
-cppon& visitor(cppon& object, size_t index);
-cppon& visitor(cppon& object, string_view_t index);
-const cppon& visitor(const cppon& object, size_t index);
-const cppon& visitor(const cppon& object, string_view_t index);
-} //namespace visitors
-
-class root_guard {
-    cppon& new_root;
-public:
-    root_guard(const cppon& new_root_arg) noexcept
-        : new_root(const_cast<cppon&>(new_root_arg)) {
-        visitors::push_root(new_root);
-    }
-    ~root_guard() noexcept {
-        visitors::pop_root(new_root);
-    }
+struct state {
+	std::string Out;              /**< The output string that stores the printed JSON representation. */
+	string_set_t Compacted;       /**< The set of labels for compacted objects. */
+	int Level{ 0 };               /**< The current indentation level. */
+	int Tabs{ 2 };                /**< The number of spaces per indentation level. */
+	int Margin{ 0 };              /**< The margin of the printed JSON representation. */
+	bool Reserve{ true };         /**< Flag indicating whether to reserve memory for printing the JSON representation. */
+	bool Flatten{ false };        /**< Flag indicating whether to expand all objects. */
+	bool Pretty{ false };         /**< Flag indicating whether to print the JSON representation in a pretty format. */
+	bool AltLayout{ false };      /**< Flag indicating whether to print the JSON representation in an alternative layout. */
+	bool Compatible{ false };     /**< Flag indicating whether to print the JSON representation in a compatible format. */
+	bool Exact{ false };          /**< Flag indicating whether to print numbers in exact format. */
+	bool RetainBuffer{ false };   /**< Flag indicating whether to retain the buffer between printing sessions. */
+	cppon to_cppon() const;
 };
 
-// Type trait to check if a type is contained in a std::variant and is an r-value reference
-template<typename T, typename Variant>
-struct is_in_variant_rv;
-
-template<typename T, typename... Types>
-struct is_in_variant_rv<T, std::variant<Types...>>
-    : std::disjunction<std::is_same<std::decay_t<T>, Types>..., std::is_rvalue_reference<T>> {};
-
-// Type trait to check if a type is contained in a std::variant and is an l-value reference
-template<typename T, typename Variant>
-struct is_in_variant_lv;
-
-template<typename T, typename... Types>
-struct is_in_variant_lv<T, std::variant<Types...>>
-    : std::disjunction<std::is_same<std::decay_t<T>, Types>..., std::negation<std::is_rvalue_reference<T>>> {};
-
-/**
- * @brief The cppon class represents a versatile container for various types used within the cppon framework.
- *
- * This class extends from `value_t`, which is an alias for a `std::variant` that encapsulates all types managed by cppon.
- * It provides several utility functions and operator overloads to facilitate dynamic type handling and hierarchical data
- * structure manipulation.
- *
- * - `is_null()`: Checks if the current instance holds a null value.
- *
- * - `operator[](index_t index)`: Overloaded subscript operators for non-const and const contexts. These operators allow
- *   access to nested cppon objects by index. If the root is null, the current instance is set as the root.
- *
- * - `operator=(const T& val)`: Template assignment operators for copying and moving values into the cppon instance.
- *
- * - `operator=(const char* val)`: Assignment operator for C-style strings, converting them to `string_view_t` before assignment.
- *
- * - `operator=(const string_t& val)`: Assignment operator for `string_t` type.
- *
- * The class leverages `std::visit` to handle the variant types dynamically, ensuring that the correct type-specific
- * operations are performed. This design allows cppon to manage complex data structures and relationships efficiently.
- */
-
-class cppon : public value_t {
-public:
-    cppon() = default;
-    cppon(const cppon&) = default;
-    cppon(cppon&&) noexcept = default;
-    ~cppon() noexcept { visitors::pop_root(*this); }
-    cppon& operator=(const cppon&) = default;
-    cppon& operator=(cppon&&) noexcept = default;
-
-    /**
-    * @brief Verifies that a cppon object is valid and throws an exception if it is not
-    *
-    * Helper that checks if a cppon object is not in the valueless_by_exception state,
-    * throwing an explicit exception if it is. This prevents undefined behavior
-    * by transforming a potential UB into a detectable logic error.
-    *
-    * @throws object_reference_lost_error if the object is invalid
-    */
-    inline bool check_valid() const noexcept {
-        if (valueless_by_exception()) {
-            CPPON_ASSERT(!"Reference lost: Object is in valueless_by_exception state");
-            return false;
-        }
-        return true;
-    }
-    inline bool ensure_valid() const {
-        if (!check_valid()) throw object_reference_lost_error{ "Object is in valueless_by_exception state" };
-    }
-
-    auto is_null() const -> bool {
-        ensure_valid();
-        return std::holds_alternative<nullptr_t>(*this);
-    }
-
-    auto operator[](string_view_t index)->cppon& {
-        ensure_valid();
-        CPPON_ASSERT(!index.empty() && "Index cannot be empty");
-        if (index.front() == '/') {
-            visitors::push_root(*this);
-            return visitors::visitor(visitors::get_root(), index.substr(1));
-        }
-        return visitors::visitor(*this, index);
-    }
-
-    auto operator[](string_view_t index)const->const cppon& {
-        ensure_valid();
-        CPPON_ASSERT(!index.empty() && "Index cannot be empty");
-        if (index.front() == '/') {
-            visitors::push_root(*this);
-            return visitors::visitor(static_cast<const cppon&>(visitors::get_root()), index.substr(1));
-        }
-        return visitors::visitor(*this, index);
-    }
-
-    auto operator[](size_t index)->cppon& {
-        ensure_valid();
-        return visitors::visitor(*this, index);
-    }
-
-    auto operator[](size_t index)const->const cppon& {
-        ensure_valid();
-        return visitors::visitor(*this, index);
-    }
-
-    auto& operator=(const char* val) {
-        ensure_valid();
-        value_t::operator=(string_view_t{ val });
-        return *this;
-    }
-
-    auto& operator=(pointer_t pointer) {
-        ensure_valid();
-        if (pointer && pointer->valueless_by_exception()) {
-            throw unsafe_pointer_assignment_error(
-                "RHS points to a valueless_by_exception object. "
-                "Sequence the operation or use path_t"
-            );
-        }
-        value_t::operator=( pointer );
-        return *this;
-    }
-
-    // Template for lvalue references, disabled for types not contained in value_t
-    template<
-        typename T,
-        typename std::enable_if<is_in_variant_lv<const T, value_t>::value, int>::type = 0>
-    auto& operator=(const T& val) {
-        ensure_valid();
-        value_t::operator=(val); return *this;
-    }
-
-    // Template for rvalue references, disabled for types not contained in value_t
-    template<
-        typename T,
-        typename std::enable_if<is_in_variant_rv<T, value_t>::value, int>::type = 0>
-    auto& operator=(T&& val) {
-        ensure_valid();
-        value_t::operator=(std::forward<T>(val)); return *this;
-    }
-
-    // Underlying container access (throws type_mismatch_error on wrong type)
-    auto array() -> array_t& {
-        ensure_valid();
-        if (auto p = std::get_if<array_t>(this)) return *p;
-        throw type_mismatch_error{ "array_t expected" };
-    }
-    auto array() const -> const array_t& {
-        ensure_valid();
-        if (auto p = std::get_if<array_t>(this)) return *p;
-        throw type_mismatch_error{ "array_t expected" };
-    }
-    auto object() -> object_t& {
-        ensure_valid();
-        if (auto p = std::get_if<object_t>(this)) return *p;
-        throw type_mismatch_error{ "object_t expected" };
-    }
-    auto object() const -> const object_t& {
-        ensure_valid();
-        if (auto p = std::get_if<object_t>(this)) return *p;
-        throw type_mismatch_error{ "object_t expected" };
-    }
-
-    // Optional non-throw helpers
-    auto try_array() noexcept -> array_t* { return check_valid() ? std::get_if<array_t>(this) : nullptr; }
-    auto try_array() const noexcept -> const array_t* { return check_valid() ? std::get_if<array_t>(this) : nullptr; }
-    auto try_object() noexcept -> object_t* { return check_valid() ? std::get_if<object_t>(this) : nullptr; }
-    auto try_object() const noexcept -> const object_t* { return check_valid() ? std::get_if<object_t>(this) : nullptr; }
-
-    // Array iteration
-    auto begin() { return array().begin(); }
-    auto end() { return array().end(); }
-    auto begin() const{ return array().begin(); }
-    auto end() const { return array().end(); }
-};
-
-#ifdef CPPON_ENABLE_STD_GET_INJECTION
-using std::get_if;
-using std::get;
-#endif
-
-}//namespace ch5
-
-#endif //CPPON_TYPES_H
-
-/*
- * C++ON - High performance C++17 JSON parser with extended features
- * https://github.com/methanium/cppon
- *
- * File: c++on-visitors.h : Object traversal and manipulation utilities
- *
- * MIT License
- * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
- *
- * See LICENSE file for complete license details
- */
-
-#ifndef CPPON_VISITORS_H
-#define CPPON_VISITORS_H
-
-namespace ch5 {
-namespace visitors {
-
-constexpr size_t max_array_delta = CPPON_MAX_ARRAY_DELTA;
-
-struct key_t {
-	std::string_view value;
-	explicit key_t(std::string_view v) : value(v) {}
-	operator std::string_view() const { return value; }
-};
-
-/**
- * @brief Central utilities for managing cppon objects and their interconnections.
- *
- * This suite of utility functions is foundational to the cppon framework. It manages a per-thread root
- * context via a stack, exposes a per-thread null sentinel, and supports dereferencing of path- and pointer-
- * based references consistently across traversals.
- *
- * This module provides:
- * - A thread_local static_storage that holds:
- *   - a std::vector<cppon*> root stack (used with stack semantics),
- *   - a singleton cppon Null used as a null sentinel.
- *
- * Sentinel and invariants:
- * - The root stack is constructed with a bottom sentinel (nullptr) to avoid repeated stack.empty() checks.
- *   This sentinel is never dereferenced. Access to the current root goes through get_root(), which asserts
- *   that the top entry is non-null.
- * - Uniqueness: each pushed root must be unique within the stack (no duplicates). In Debug, push_root() asserts this.
- * - LIFO discipline: pop_root() only pops if the given object is at the top; otherwise it is a no-op (harmless temporaries).
- *
- * - `null()`: Provides a per-thread singleton instance representing a null value, ensuring consistent
- *   representation of null or undefined states across the cppon object hierarchy.
- *
- * - Root stack and accessors:
- *   - `root_stack()`: Access to the thread-local stack that holds `cppon*` roots.
- *   - `get_root()`: Returns a reference to the current root. Asserts the stack is never empty and the
- *     top is never nullptr (thus the sentinel is never accessed).
- *   - `push_root(const cppon&)` and `pop_root(const cppon&)`: Push the given object if not already on top,
- *     and pop it only if it is the current top, respectively. Guarantees balanced stack usage in scoped code.
- *
- * - Absolute paths and guards:
- *   - Absolute-path access (string indices starting with '/') uses `push_root(*this)` and resolves the
- *     remainder of the path against `get_root()`.
- *   - `root_guard` is the RAII helper to scope a root change safely (push on construction, pop on destruction).
- *
- * @note `deref_if_ptr` resolves `pointer_t` directly and `path_t` against the current root. Assertions enforce
- *       that `get_root()` is only used when the top is non-null.
- *
- * Collectively, these utilities underscore the cppon framework's flexibility, robustness, and capability to represent
- * and manage complex data structures and relationships. They are instrumental in ensuring that cppon objects can be
- * dynamically linked, accessed, and manipulated within a coherent and stable framework.
- */
-
-// The stack is initialized with a bottom sentinel (nullptr). This avoids empty() checks.
-// The sentinel is never dereferenced because get_root() asserts top != nullptr.
-struct static_storage {
-	static_storage() noexcept : stack{ nullptr }, Null{nullptr} {}
-	std::vector<cppon*> stack;
-	cppon Null;
-};
-inline static_storage& get_static_storage() noexcept {
-	static thread_local static_storage storage;
-	return storage;
-}
-inline cppon& null() noexcept {
-	return get_static_storage().Null;
-}
-inline std::vector<cppon*>& root_stack() noexcept {
-	return get_static_storage().stack;
-}
-inline cppon& get_root() noexcept {
-	CPPON_ASSERT(!root_stack().empty() && root_stack().back() != nullptr &&
-		"Root stack shall never be empty and stack top shall never be nullptr");
-	return *root_stack().back();
-}
-// Promote the entry to top if found; returns true if present (already top or promoted)
-inline bool hoist_if_found(std::vector<cppon*>& s, const cppon* p) noexcept {
-	if (s.back() == p) return true;
-	auto found = std::find(s.rbegin(), s.rend(), p);
-	if (found == s.rend()) return false;
-	std::swap(*found, s.back());
-	return true;
-}
-inline void pop_root(const cppon& root) noexcept {
-	auto& stack = root_stack();
-	if (hoist_if_found(stack, &root))
-		stack.pop_back();
-}
-inline void push_root(const cppon& root) {
-	auto& stack = root_stack();
-	if (!hoist_if_found(stack, &root))
-		stack.push_back(&const_cast<cppon&>(root));
-}
-
-// Return true if every character is '0'..'9' (empty => false for path segments)
-inline bool all_digits(string_view_t sv) noexcept {
-	if (sv.empty()) return false;
-	return std::all_of(sv.begin(), sv.end(), [](unsigned char c) {
-		unsigned d = static_cast<unsigned>(c) - static_cast<unsigned>('0');
-		return d <= 9u;
-	});
-}
-
-// Bounded helper to convert a numeric string_view into size_t
-inline size_t parse_index(string_view_t sv) noexcept {
-	size_t idx = 0;
-	for (char c : sv) {
-		idx = idx * 10 + static_cast<size_t>(c - '0');
-	}
-	return idx;
-}
-
-/**
- * @brief Internal dereference helpers for pointer_t and path_t.
- *
- * deref_if_ptr:
- * - pointer_t: returns *arg (or the thread-local null sentinel if the pointer is null).
- * - path_t: resolves against the current root (get_root()); the leading '/' is removed unconditionally.
- * - other alternatives: returns the original object reference.
- *
- * deref_if_not_null (non-const only):
- * - If the slot holds a null pointer_t, returns the slot itself (enables autovivification at the slot).
- * - Otherwise delegates to deref_if_ptr.
- *
- * Notes
- * - These helpers are internal (namespace ch5::visitors). Public traversal uses visitor(...) and cppon::operator[].
- * - On path_t resolution, visitor(...) may throw: member_not_found_error, type_mismatch_error, null_value_error, etc.
- */
-inline auto deref_if_ptr(const cppon& obj) -> const cppon& {
-	return std::visit([&](auto&& arg) -> const cppon& {
-		using type = std::decay_t<decltype(arg)>;
-		if constexpr (std::is_same_v<type, pointer_t>)
-			return arg ? *arg : null();
-		if constexpr (std::is_same_v<type, path_t>) {
-			string_view_t tmp = arg.value;
-			tmp.remove_prefix(1);
-			return visitor(static_cast<const cppon&>(get_root()), tmp);
-		}
-		return obj;
-	}, static_cast<const value_t&>(obj));
-}
-inline auto deref_if_ptr(cppon& obj) -> cppon& {
-	return std::visit([&](auto&& arg) -> cppon& {
-		using type = std::decay_t<decltype(arg)>;
-		if constexpr (std::is_same_v<type, pointer_t>)
-			return arg ? *arg : null();
-		if constexpr (std::is_same_v<type, path_t>) {
-			string_view_t tmp = arg.value;
-			tmp.remove_prefix(1);
-			return visitor(get_root(), tmp);
-		}
-		return obj;
-	}, static_cast<value_t&>(obj));
-}
-
-/**
- * @brief Selects the write reference for a non-leaf path segment.
- *
- * Behavior:
- * - If the slot currently holds a null pointer_t, returns the slot itself (autovivification at the slot).
- * - Otherwise returns the dereferenced target via deref_if_ptr (pointer_t/path_t/value).
- *
- * Exceptions:
- * - May propagate exceptions from deref_if_ptr -> visitor(get_root(), tmp) when resolving path_t
- *   (e.g., member_not_found_error, type_mismatch_error, null_value_error, ...).
- * - A null pointer_t path does not throw here.
- */
-inline cppon& deref_if_not_null(cppon& slot) {
-	if (auto p = std::get_if<pointer_t>(&slot); p && !*p)
-		return slot;
-	return deref_if_ptr(slot);
-}
-
-/**
- * @brief Visitor functions for accessing and potentially modifying members in an object using a key.
- *
- * These specializations of the visitor function serve a dual purpose within the cppon framework. They allow for direct access
- * to members within an object by their name key. The non-const version additionally supports dynamically resizing the object
- * to accommodate new members, facilitating the mutation of the object structure.
- *
- * The const version of the function provides read-only access to the members within a constant object, ensuring that the operation does not
- * modify the object. It checks if the requested key is present inside the object and returns a reference to the member's value at that
- * location. If the key is not found, a null object is returned, indicating that the value does not exist at the specified key.
- *
- * Exceptions:
- * - anything that std::vector::emplace_back might throw (e.g., std::bad_alloc).
- */
-inline auto visitor(const object_t& object, key_t key) noexcept -> const cppon& {
-	for (auto& [name, value] : object)
-		if (name == key) return value;
-	return null();
-}
-inline auto visitor(object_t& object, key_t key) -> cppon& {
-	for (auto& [name, value] : object)
-		if (name == key) return value;
-	object.emplace_back(key, null());
-	return std::get<cppon>(object.back());
-}
-
-/**
- * @brief Visitor functions for accessing and potentially modifying elements in an array using a numeric index.
- *
- * These specializations of the visitor function serve a dual purpose within the cppon framework. They allow for direct access
- * to elements within an array by their numerical index. The non-const version additionally supports dynamically resizing the array
- * to accommodate indices beyond the current bounds, facilitating the mutation of the array structure. This dynamic resizing is
- * constrained by a permissible range, defined by the current size plus a max_array_delta threshold, to prevent excessive expansion.
- *
- * The const version of the function provides read-only access to elements within a constant array, ensuring that the operation does not
- * modify the array. It checks if the requested index is within the bounds of the array and returns a reference to the element at that
- * index. If the index is out of bounds, a null object is returned, indicating that the element does not exist at the specified index.
- *
- * Note that the non-const version is the source of `excessive_array_resize_error` if the requested index exceeds the permissible range
- * (current size + max_array_delta).
- *
- * Exceptions:
- * - excessive_array_resize_error: The requested index exceeds the permissible range (current size + max_array_delta) in the non-const version.
- * - anything that std::vector::resize might throw (e.g., std::bad_alloc).
- */
-inline const cppon& visitor(const array_t& array, size_t index) noexcept {
-	if (index >= array.size()) {
-		return null();
-	}
-	return array[index];
-}
-inline cppon& visitor(array_t& array, size_t index) {
-	if (index >= array.size() ) {
-		const size_t max_allowed = array.size() + max_array_delta;
-		if (index > max_allowed)
-			throw excessive_array_resize_error();
-		array.resize(index + 1, null());
-	}
-	return array[index];
-}
-
-/**
- * @brief Visitor functions for accessing and potentially modifying elements in an array using a string index.
- *
- * The first path segment must be a numeric index. If not, bad_array_index_error is thrown.
- * If more segments follow, traversal recurses into the child (arrays/objects only).
- *
- * Exceptions:
- * - bad_array_index_error: the immediate segment is not numeric.
- * - null_value_error (const variant): next segment requested but current value is null.
- * - type_mismatch_error: non-terminal segment is not array/object.
- */
-inline auto visitor(const array_t& array, string_view_t index) -> const cppon& {
-	auto next{ index.find('/') };
-	auto digits{ index.substr(0, next) }; // digits are numbers
-	if (!all_digits(digits))
-		throw bad_array_index_error(digits);
-	auto& element = visitor(array, parse_index(digits));
-	if (next == index.npos) return element; // if there is no next segment, it's a value
-	auto& value = deref_if_ptr(element); // if there is a next segment, it's a path
-	if (value.is_null()) throw null_value_error(); // if the value is null, throw an error
-    return visitor(value, index.substr(next + 1));
-}
-inline auto visitor(array_t& array, string_view_t index) -> cppon& {
-	auto next{ index.find('/') };
-	auto digits{ index.substr(0, next) }; // digits are numbers
-	if (!all_digits(digits))
-		throw bad_array_index_error(digits);
-	auto& element = visitor(array, parse_index(digits));
-	if (next == index.npos) return element; // if there is no next segment, it's a value
-	auto& value = deref_if_not_null(element); // if there is a next segment, it's a path
-	auto newIndex{ index.substr(next + 1) };
-	auto nextKey{ newIndex.substr(0, newIndex.find('/')) };
-	CPPON_ASSERT(!nextKey.empty() && "Next key shall never be empty here");
-	if (all_digits(nextKey)) {
-		// next key is a number
-		if (value.try_object()) throw type_mismatch_error{};
-		if (value.try_array() == nullptr) value = cppon{ array_t{} };
-	} else {
-		// next key is a string
-		if (value.try_array()) throw type_mismatch_error{};
-		if (value.try_object() == nullptr) value = cppon{ object_t{} };
-	}
-    return visitor(value, newIndex);
-}
-
-/**
- * @brief Visitor functions for accessing and potentially modifying members in an object using a string key.
- *
- * The first path segment can be any name key.
- * If more segments follow, traversal recurses into the child (arrays/objects only).
- *
- * Exceptions:
- * - member_not_found_error (const variant): next segment requested but current value is null.
- * - type_mismatch_error: non-terminal segment is not array/object.
- */
-inline const cppon& visitor(const object_t& object, string_view_t index) {
-	auto next{ index.find('/') };
-	auto key = index.substr(0, next); // key is a name
-	auto& element = visitor(object, key_t{ key });
-	if (next == index.npos) return element; // if there is no next segment, it's a value
-	auto& value = deref_if_ptr(element); // if there is a next segment, it's a path
-	if (value.is_null())
-		throw member_not_found_error{}; // if the value not defined, throw an error
-	return visitor(value, index.substr(next + 1));
-}
-inline cppon& visitor(object_t& object, string_view_t index) {
-	auto next{ index.find('/') };
-	auto key = index.substr(0, next); // key is a name
-	auto& element = visitor(object,  key_t{ key });
-	if (next == index.npos) return element; // no next segment, return value reference
-	auto& value = deref_if_not_null(element); // if there is a next segment, it's a path
-	auto newIndex{ index.substr(next + 1) };
-	auto nextKey{ newIndex.substr(0, newIndex.find('/')) };
-	CPPON_ASSERT(!nextKey.empty() && "Next key shall never be empty here");
-	if (all_digits(nextKey)) {
-		// next key is a number
-		if (value.try_object()) throw type_mismatch_error{};
-		if (value.try_array() == nullptr) value = cppon{ array_t{} };
-	} else {
-		// next key is a string
-		if (value.try_array()) throw type_mismatch_error{};
-		if (value.try_object() == nullptr) value = cppon{ object_t{} };
-	}
-	return visitor(value, newIndex);
-}
-
-/**
- * @brief Visitor functions for accessing and potentially modifying elements within a cppon object by a numerical index.
- *
- * These functions facilitate direct access to elements within a cppon object, which is expected to be an array,
- * using a numerical index. They are designed to handle both const and non-const contexts, allowing for read-only or
- * modifiable access to the elements, respectively.
- *
- * In the non-const version, if the specified index exceeds the current size of the array, the array is automatically resized
- * to accommodate the new element at the given index. This resizing is subject to a maximum increment limit defined by max_array_delta to prevent
- * excessive and potentially harmful allocation. If the required increment to accommodate the new index exceeds this limit, a bad_array_index_error exception is thrown,
- * signaling an attempt to access or create an element at an index that would require an excessively large increase in the array size.
- *
- * In both versions, if the cppon object is not an array (indicating a misuse of the type), a type_mismatch_error exception is
- * thrown. This ensures that the functions are used correctly according to the structure of the cppon object and maintains type safety.
- *
- * The const version of these functions provides read-only access to the elements, ensuring that the operation does not modify the
- * object being accessed. It allows for dynamic dereferencing of objects within a const context, supporting scenarios where the
- * cppon object structure is accessed in a read-only manner.
- *
- * Key Points:
- * - Direct access to elements by numerical index.
- * - Automatic resizing of the array in the non-const version to accommodate new elements, with a safeguard increment limit (max_array_delta).
- * - Throws excessive_array_resize_error if the required increment to reach the specified index exceeds the permissible range.
- * - Throws type_mismatch_error if the cppon object is not an array.
- * - Supports both const and non-const contexts, enabling flexible data manipulation and access patterns.
- *
- * @param object The cppon object to visit. This object must be an array for index-based access to be valid.
- * @param index The numerical index to access the element. In the non-const version, if the index is greater than the size of the array, the array is resized according to the increment limit.
- * @return (const) cppon& A reference to the visited element in the array. The non-const version allows for modification of the element.
- * @throws excessive_array_resize_error If the required increment to accommodate the specified index exceeds the maximum limit allowed by max_array_delta.
- * @throws type_mismatch_error If the cppon object is not an array, indicating a type error.
- */
-inline const cppon& visitor(const cppon& object, size_t index) {
-    return std::visit([&](auto&& arg) -> const cppon& {
-		using type = std::decay_t<decltype(arg)>;
-		if constexpr (std::is_same_v<type, array_t>)
-			return visitor(arg, index);
-		throw type_mismatch_error{};
-    }, static_cast<const value_t&>(object));
-}
-inline cppon& visitor(cppon& object, size_t index) {
-    return std::visit([&](auto&& arg) -> cppon& {
-		using type = std::decay_t<decltype(arg)>;
-		if constexpr (std::is_same_v<type, array_t>)
-			return visitor(arg, index);
-        if constexpr (std::is_same_v<type, nullptr_t>) {
-            // autovivify the root as an object if it is null
-            if (object.try_object()) throw type_mismatch_error{};
-            if (object.try_array() == nullptr) object = cppon{ array_t{} };
-            return visitor(std::get<array_t>(object), index);
-        }
-        throw type_mismatch_error{};
-    }, static_cast<value_t&>(object));
-}
-
-/**
- * @brief Dynamically accesses elements within a cppon object using a string index, with support for both const and non-const contexts.
- *
- * This function allows dynamic access to elements within a cppon object, which can be either an array or an object,
- * using a string index. The string index can represent either a direct key in an object or a numeric index in an array.
- *
- * Additionally, it supports hierarchical access to nested elements by interpreting the string index as a path, where segments
- * of the path are separated by slashes ('/'). This allows deep access to nested structures, with the non-const version
- * allowing modification of elements.
- *
- * The function first determines the type of the cppon object (array or object) based on its current state. It then attempts
- * to access the element specified by the index or path. If the element is within a nested structure, the function recursively
- * navigates through the structure to reach the desired element. In the non-const version, any missing elements along the path
- * are created as either objects or arrays, depending on the segment type.
- *
- * Exceptions:
- * - `type_mismatch_error` is thrown if the object is not an array or an object when expected.
- * - In the const version:
- *   - If the key is a path, `member_not_found_error` or `type_mismatch_error` may be thrown depending on the path.
- *   - For array segments, `bad_array_index_error` is thrown if the segment is not numeric.
- *   - When reaching the leaf of the path in an object_t and the member does not exist, it returns the null object, avoiding exceptions for non-existent members in read-only scenarios.
- *   - If the index is out of bounds for the array, it returns the null object.
- * - In the non-const version:
- *   - If the path exists and the next segment is numeric for object_t, it throws `type_mismatch_error`.
- *   - For array segments, `bad_array_index_error` is thrown if the segment is not numeric.
- *   - If the index is out of bounds for the array and requires excessive resizing, it throws `excessive_array_resize_error`.
- *
- * This ensures that the caller is informed of incorrect access attempts or structural issues within the cppon object.
- *
- * The const version of this function provides the same functionality but ensures that the operation does not modify the object
- * being dereferenced. It allows dynamic dereferencing of objects in a const context, supporting scenarios where the cppon object
- * structure is accessed in a read-only manner.
- *
- * @param object The cppon object to visit. This object can be an array or an object, and may contain nested structures.
- *
- * @param index A string representing the index or path to the element to access. This can specify direct access or hierarchical access to nested elements.
- *              If index is empty, the function returns the object itself.
- *
- * @return (const) cppon& A reference to the cppon element at the specified index or path, with the non-const version allowing modification of the element.
- *
- * @throws type_mismatch_error If the cppon object does not match the expected structure for the specified index or path, indicating a type mismatch or invalid access attempt.
- * @throws member_not_found_error In the specified scenarios, indicating that a specified member in the path does not exist.
- * @throws invalid_path_segment_error In the specified scenarios, indicating that a path segment is invalid or out of bounds.
- * @throws excessive_array_resize_error In the specified scenarios, indicating that excessive array resizing is required.
- */
-inline const cppon& visitor(const cppon& object, string_view_t index) {
-	if (index.empty()) return object;
-    return std::visit([&](auto&& arg) -> const cppon& {
-        using type = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<type, object_t>)
-            return visitor(arg, index);
-        if constexpr (std::is_same_v<type, array_t>)
-            return visitor(arg, index);
-        throw type_mismatch_error{};
-    }, static_cast<const value_t&>(object));
-}
-inline cppon& visitor(cppon& object, string_view_t index) {
-	if (index.empty()) return object;
-    return std::visit([&](auto&& arg) -> cppon& {
-        using type = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<type, object_t>)
-            return visitor(arg, index);
-        if constexpr (std::is_same_v<type, array_t>)
-            return visitor(arg, index);
-        if constexpr (std::is_same_v<type, nullptr_t>) {
-            // autovivify the root as an object if it is null
-            auto next{ index.find('/') };
-            auto key = index.substr(0, next); // key is a name
-            if (all_digits(key)) {
-                // next key is a number
-                if (object.try_object()) throw type_mismatch_error{};
-                if (object.try_array() == nullptr) object = cppon{ array_t{} };
-                return visitor(std::get<array_t>(object), index);
-            }
-            else {
-                // next key is a string
-                if (object.try_array()) throw type_mismatch_error{};
-                if (object.try_object() == nullptr) object = cppon{ object_t{} };
-                return visitor(std::get<object_t>(object), index);
-            }
-        }
-        throw type_mismatch_error{};
-    }, static_cast<value_t&>(object));
-}
-
-/**
- * @brief Retrieves the blob data from a cppon object.
- *
- * This function attempts to retrieve the blob data from a given cppon object. If the object contains a `blob_string_t`,
- * it decodes the base64 string into a `blob_t` and updates the cppon object. If the object already contains a `blob_t`,
- * it simply returns it. If the object contains neither, it throws a `type_mismatch_error`.
- *
- * @param value The cppon object from which to retrieve the blob data.
- * @param raise Whether to raise an exception if base64 decoding fails. If false, returns an empty blob instead.
- *              Defaults to true.
- * @return A reference to the blob data contained within the cppon object.
- *
- * @exception type_mismatch_error Thrown if the cppon object does not contain a `blob_string_t` or `blob_t`.
- * @exception invalid_base64_error Thrown if the base64 string is invalid and `raise` is set to true.
- */
-inline blob_t& get_blob(cppon& value, bool raise = true) {
-    return std::visit([&](auto&& arg) -> blob_t& {
-        using type = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<type, path_t>) {
-            return get_blob(deref_if_ptr(value));
-        }
-        else if constexpr (std::is_same_v<type, pointer_t>) {
-            return get_blob(*arg);
-        }
-        else if constexpr (std::is_same_v<type, blob_string_t>) {
-            value = decode_base64(arg, raise);
-            return std::get<blob_t>(value);
-        }
-        else if constexpr (std::is_same_v<type, blob_t>) {
-            return arg;
-        }
-        else {
-            throw type_mismatch_error{};
-        }
-        }, value);
-}
-
-/**
- * @brief Retrieves a constant reference to blob data from a cppon object.
- *
- * This function attempts to retrieve a constant reference to the blob data from a given cppon object.
- * Unlike the non-const version, this function does not perform any conversion of `blob_string_t` to `blob_t`.
- * If the object contains a `blob_t`, it returns a reference to it. If the object contains a `blob_string_t`,
- * it throws a `blob_not_realized_error` since the blob must be decoded first. For all other types, it throws
- * a `type_mismatch_error`.
- *
- * @param value The cppon object from which to retrieve the blob data.
- * @return A constant reference to the blob data contained within the cppon object.
- *
- * @exception type_mismatch_error Thrown if the cppon object does not contain a `blob_t` or `blob_string_t`.
- * @exception blob_not_realized_error Thrown if the cppon object contains a `blob_string_t` (not yet decoded).
- */
-inline const blob_t& get_blob(const cppon& value) {
-    return std::visit([&](const auto& arg) -> const blob_t& {
-        using type = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<type, path_t>) {
-            return get_blob(deref_if_ptr(value));
-        }
-        else if constexpr (std::is_same_v<type, pointer_t>) {
-            return get_blob(*arg);
-        }
-        else if constexpr (std::is_same_v<type, blob_string_t>) {
-            throw blob_not_realized_error{};
-        }
-        else if constexpr (std::is_same_v<type, blob_t>) {
-            return arg;
-        }
-        else {
-            throw type_mismatch_error{};
-        }
-        }, value);
-}
-
-/**
- * @brief Retrieves a value of type T from a cppon value, ensuring strict type matching.
- *
- * This function attempts to retrieve a value of type T from the cppon variant. If the value is of type
- * number_t, it first converts it to the appropriate numeric type using convert_to_numeric. If the value
- * is already of type T, it is returned directly. If the value is of a different type, a type_mismatch_error
- * is thrown.
- *
- * @tparam T The type to retrieve. Must be a numeric type.
- * @param value The cppon value from which to retrieve the type T value.
- * @return T The value of type T.
- *
- * @throws type_mismatch_error if the value is not of type T or cannot be converted to type T.
- *
- * @note This function uses std::visit to handle different types stored in the cppon variant.
- */
-template<typename T>
-T get_strict(cppon& value) {
-    static_assert(std::is_arithmetic_v<T>, "T must be a numeric type");
-    return std::visit([&](auto&& arg) -> T {
-        using type = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<type, path_t>) {
-            return get_strict<T>(deref_if_ptr(value));
-        }
-        else if constexpr (std::is_same_v<type, pointer_t>) {
-            return get_strict<T>(*arg);
-        }
-        else if constexpr (std::is_same_v<type, number_t>) {
-            convert_to_numeric(value);
-            return get_strict<T>(value);
-        }
-        else if constexpr (std::is_same_v<type, T>) {
-            return arg;
-        }
-        else {
-            throw type_mismatch_error{};
-        }
-        }, value);
-}
-
-template<typename T>
-T get_strict(const cppon& value) {
-    static_assert(std::is_arithmetic_v<T>, "T must be a numeric type");
-    return std::visit([&](const auto& arg) -> T {
-        using type = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<type, path_t>) {
-            return get_strict<T>(deref_if_ptr(value));
-        }
-        else if constexpr (std::is_same_v<type, pointer_t>) {
-            return get_strict<T>(*arg);
-        }
-        else if constexpr (std::is_same_v<type, number_t>) {
-            throw number_not_converted_error{};
-        }
-        else if constexpr (std::is_same_v<type, T>) {
-            return arg;
-        }
-        else {
-            throw type_mismatch_error{};
-        }
-        }, value);
-}
-
-/**
- * @brief Retrieves a value of type T from a cppon value, allowing type casting.
- *
- * This function attempts to retrieve a value of type T from the cppon variant. If the value is of type
- * number_t, it first converts it to the appropriate numeric type using convert_to_numeric. If the value
- * is of a different numeric type, it is cast to type T. If the value is of a non-numeric type, a
- * type_mismatch_error is thrown.
- *
- * @tparam T The type to retrieve. Must be a numeric type.
- * @param value The cppon value from which to retrieve the type T value.
- * @return T The value of type T.
- *
- * @throws type_mismatch_error if the value is not a numeric type and cannot be cast to type T.
- *
- * @note This function uses std::visit to handle different types stored in the cppon variant.
- */
-template<typename T>
-T get_cast(cppon& value) {
-    static_assert(std::is_arithmetic_v<T>, "T must be a numeric type");
-    return std::visit([&](auto&& arg) -> T {
-        using type = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<type, path_t>) {
-            return get_cast<T>(deref_if_ptr(value));
-        }
-        else if constexpr (std::is_same_v<type, pointer_t>) {
-            return get_cast<T>(*arg);
-        }
-        else if constexpr (std::is_same_v<type, number_t>) {
-            convert_to_numeric(value);
-            return get_cast<T>(value);
-        }
-        else if constexpr (std::is_arithmetic_v<type>) {
-            return static_cast<T>(arg);
-        }
-        else {
-            throw type_mismatch_error{};
-        }
-        }, value);
-}
-
-template<typename T>
-T get_cast(const cppon& value) {
-    static_assert(std::is_arithmetic_v<T>, "T must be a numeric type");
-    return std::visit([&](auto&& arg) -> T {
-        using type = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<type, path_t>) {
-            return get_cast<T>(deref_if_ptr(value));
-        }
-        else if constexpr (std::is_same_v<type, pointer_t>) {
-            return get_cast<T>(*arg);
-        }
-        else if constexpr (std::is_same_v<type, number_t>) {
-            throw number_not_converted_error{};
-        }
-        else if constexpr (std::is_arithmetic_v<type>) {
-            return static_cast<T>(arg);
-        }
-        else {
-            throw type_mismatch_error{};
-        }
-        }, value);
-}
-
-template<typename T>
-constexpr T* get_optional(cppon& value) noexcept {
-    return std::visit([&](auto&& arg) -> T* {
-        using type = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<type, path_t>) {
-            return get_optional<T>(deref_if_ptr(value));
-        }
-        else if constexpr (std::is_same_v<type, pointer_t>) {
-            return get_optional<T>(*arg);
-        }
-        else {
-            return std::get_if<T>(&value);
-        }
-        }, value);
-}
-
-template<typename T>
-constexpr const T* get_optional(const cppon& value) noexcept {
-    return std::visit([&](auto&& arg) -> const T* {
-        using type = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<type, path_t>) {
-            return get_optional<T>(deref_if_ptr(value));
-        }
-        else if constexpr (std::is_same_v<type, pointer_t>) {
-            return get_optional<T>(*arg);
-        }
-        else {
-            return std::get_if<T>(&value);
-        }
-        }, value);
-}
-
-} // namespace visitors
-
-using visitors::get_blob;
-using visitors::get_strict;
-using visitors::get_cast;
-using visitors::get_optional;
-
+} // namespace printer_state
 } // namespace ch5
 
-#endif // CPPON_VISITORS_H
+#endif // CPPON_PRINTER_STATE_H
 
 /*
  * C++ON - High performance C++17 JSON parser with extended features
  * https://github.com/methanium/cppon
  *
- * File: c++on-scanner.h : C++ON User-defined literals
+ * File: c++on-swar.h : C++ON SIMD Within A Register (SWAR) utilities
  *
  * MIT License
  * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
@@ -3991,12 +3075,12 @@ using visitors::get_optional;
  * See LICENSE file for complete license details
  */
 
-#ifndef CPPON_SCANNER_H
-#define CPPON_SCANNER_H
+#ifndef CPPON_SWAR_H
+#define CPPON_SWAR_H
 
 namespace ch5 {
 
-// SWAR constants (SIMD Within A Register)
+// SWAR constants
 constexpr uint64_t kOnes = 0x0101010101010101ULL;   // (~0ULL / 255)
 constexpr uint64_t kHigh = 0x8080808080808080ULL;   // (~0ULL / 255) * 128
 
@@ -4072,14 +3156,14 @@ inline const char* m64_parallel_digits(std::string_view Text, size_t Ofs, size_t
     const char* end = Text.data() + Ofs + Count;
 
     // Align
-    while (p <= end && (reinterpret_cast<uintptr_t>(p) & 7u)) {
-        const unsigned char c = static_cast<unsigned char>(*p);
-        if ((c - 0x30u) > 0x09u) return p;
-        ++p;
-    }
+    //while (p <= end && (reinterpret_cast<uintptr_t>(p) & 7u)) {
+    //    const unsigned char c = static_cast<unsigned char>(*p);
+    //    if ((c - 0x30u) > 0x09u) return p;
+    //    ++p;
+    //}
     // Aligned Words
     while (p + 8 <= end) {
-        uint64_t w = m64_load_aligned(p);
+        uint64_t w = m64_load_unaligned(p);
         uint64_t mask = not_digit_mask(w);
         if (mask) {
             return p + m64_get_first_match(mask);
@@ -4107,13 +3191,13 @@ inline const char* m64_parallel_find_quote(std::string_view Text, size_t Ofs, si
     const char* end = Text.data() + Ofs + Count;
 
     // Align to 8 bytes
-    while (p < end && (reinterpret_cast<uintptr_t>(p) & 7u)) {
-        if (*p == '"') return p;
-        ++p;
-    }
+    //while (p < end && (reinterpret_cast<uintptr_t>(p) & 7u)) {
+    //    if (*p == '"') return p;
+    //    ++p;
+    //}
     // Aaligned Words
     while (p + 8 <= end) {
-        uint64_t w = m64_load_aligned(p);
+        uint64_t w = m64_load_unaligned(p);
         uint64_t mask = eq_byte_mask(w, static_cast<uint8_t>('"'));
         if (mask) {
             return p + m64_get_first_match(mask);
@@ -4140,18 +3224,18 @@ inline const char* m64_parallel_skip_spaces(std::string_view Text, size_t Ofs, s
     const char* end = Text.data() + Ofs + Count;
 
     // Align
-    while (p < end && (reinterpret_cast<uintptr_t>(p) & 7u)) {
-        const unsigned char c = static_cast<unsigned char>(*p);
-        #ifndef CPPON_TRUSTED_INPUT
-        if (c != 0x20 && c != '\t' && c != '\n' && c != '\r') return p;
-        #else
-        if ((c - 1u) >= 0x20) return p;
-        #endif
-        ++p;
-    }
+    //while (p < end && (reinterpret_cast<uintptr_t>(p) & 7u)) {
+    //    const unsigned char c = static_cast<unsigned char>(*p);
+    //    #ifndef CPPON_TRUSTED_INPUT
+    //    if (c != 0x20 && c != '\t' && c != '\n' && c != '\r') return p;
+    //    #else
+    //    if ((c - 1u) >= 0x20) return p;
+    //    #endif
+    //    ++p;
+    //}
     // Aligned Words
     while (p + 8 <= end) {
-        uint64_t w = m64_load_aligned(p);
+        uint64_t w = m64_load_unaligned(p);
         uint64_t mask = not_space_mask(w);
         if (mask) { // Not all spaces
             return p + m64_get_first_match(mask);
@@ -4224,172 +3308,13 @@ inline size_t m64_parallel_skip_spaces_pos(std::string_view Text) noexcept {
 
 } // namespace ch5
 
-#if CPPON_USE_SIMD
-    #include "../simd/simd_comparisons.h"
-    #include "../platform/processor_features_info.h"
-    #include <atomic>
-
-    namespace ch5 {
-    namespace scanner {
-        // Dynamic detection of SIMD capabilities
-        enum class SimdLevel {
-            None,
-            SSE,
-            AVX2,
-            AVX512
-        };
-
-        // Lazily bound function pointer dispatch
-        using find_quote_fn = size_t(*)(std::string_view, size_t);
-        using scan_digits_fn = const char* (*)(std::string_view, size_t);
-
-        inline find_quote_fn bind_find_quote_pos(SimdLevel lvl) noexcept {
-            switch (lvl) {
-            case SimdLevel::AVX512: return simd::zmm_parallel_find_quote_pos;
-            case SimdLevel::AVX2:   return simd::ymm_parallel_find_quote_pos;
-            case SimdLevel::SSE:    return simd::xmm_parallel_find_quote_pos;
-            default:                return m64_parallel_find_quote_pos;
-            }
-        }
-        inline scan_digits_fn bind_parallel_digits(SimdLevel lvl) noexcept {
-            switch (lvl) {
-            case SimdLevel::AVX512: return simd::zmm_parallel_digits;
-            case SimdLevel::AVX2:   return simd::ymm_parallel_digits;
-            case SimdLevel::SSE:    return simd::xmm_parallel_digits;
-            default:                return m64_parallel_digits;
-            }
-        }
-
-        // Active function pointers (per thread)
-        struct local_storage {
-            inline static SimdLevel MaxSimdLevel = ([]() noexcept -> SimdLevel {
-                platform::processor_features_info cpu_info;
-                auto features = cpu_info.cpu_features();
-                if (features.AVX512F) return SimdLevel::AVX512;
-                if (features.AVX2)    return SimdLevel::AVX2;
-                if (features.SSE4_2)  return SimdLevel::SSE;
-                return SimdLevel::None;
-                })();
-            inline static thread_local find_quote_fn  p_find_quote = bind_find_quote_pos(MaxSimdLevel);
-            inline static thread_local scan_digits_fn p_scan_digits = bind_parallel_digits(MaxSimdLevel);
-            inline static thread_local int simd_override_thread = -1;
-        };
-
-        inline void ensure_dispatch_bound() noexcept;
-
-        // Global process-wide override; -1 = none
-        inline namespace simd_config {
-            inline std::atomic<int> g_simd_override_global{ -1 };
-
-            inline SimdLevel cap_to_supported(SimdLevel lvl) noexcept {
-                return (static_cast<int>(lvl) <= static_cast<int>(local_storage::MaxSimdLevel)) ? lvl : local_storage::MaxSimdLevel;
-            }
-            inline void set_simd_override_global(SimdLevel lvl) noexcept {
-                g_simd_override_global.store(static_cast<int>(cap_to_supported(lvl)), std::memory_order_relaxed);
-                ensure_dispatch_bound();
-            }
-            inline void clear_simd_override_global() noexcept {
-                g_simd_override_global.store(-1, std::memory_order_relaxed);
-                ensure_dispatch_bound();
-            }
-            inline void set_simd_override_thread(SimdLevel lvl) noexcept {
-                local_storage::simd_override_thread = static_cast<int>(cap_to_supported(lvl));
-                ensure_dispatch_bound();
-            }
-            inline void clear_simd_override_thread() noexcept {
-                local_storage::simd_override_thread = -1;
-                ensure_dispatch_bound();
-            }
-            inline bool has_simd_override() noexcept {
-                return local_storage::simd_override_thread >= 0 || g_simd_override_global.load(std::memory_order_relaxed) >= 0;
-            }
-            inline SimdLevel current_simd_override() noexcept {
-                if (local_storage::simd_override_thread >= 0) return static_cast<SimdLevel>(local_storage::simd_override_thread);
-                int v = g_simd_override_global.load(std::memory_order_relaxed);
-                return v < 0 ? SimdLevel::None : static_cast<SimdLevel>(v);
-            }
-        }
-
-        inline void bind_dispatch(SimdLevel lvl) noexcept {
-            local_storage::p_find_quote = bind_find_quote_pos(lvl);
-            local_storage::p_scan_digits = bind_parallel_digits(lvl);
-        }
-
-        inline SimdLevel detect_simd_level() noexcept {
-            if (has_simd_override()) { // Honor override first
-                return cap_to_supported(current_simd_override());
-            }
-            return local_storage::MaxSimdLevel;
-        }
-
-        inline void ensure_dispatch_bound() noexcept {
-            bind_dispatch(detect_simd_level());
-        }
-
-        // Hot-path APIs
-        inline size_t find_quote_pos(std::string_view text, size_t start = 0) noexcept {
-            return local_storage::p_find_quote(text, start);
-        }
-
-        inline const char* scan_digits(std::string_view text, size_t start = 0) noexcept {
-            return local_storage::p_scan_digits(text, start);
-        }
-    }
-    // Public export of SIMD override helpers at ch5 scope
-    using scanner::SimdLevel;
-    inline void set_global_simd_override(scanner::SimdLevel lvl) noexcept {
-        scanner::set_simd_override_global(lvl);
-    }
-    inline void clear_global_simd_override() noexcept {
-        scanner::clear_simd_override_global();
-    }
-    inline void set_thread_simd_override(scanner::SimdLevel lvl) noexcept {
-        scanner::set_simd_override_thread(lvl);
-    }
-    inline void clear_thread_simd_override() noexcept {
-        scanner::clear_simd_override_thread();
-    }
-    inline SimdLevel effective_simd_level() noexcept {
-        return scanner::detect_simd_level();
-    }
-    }
-#else
-    // Implementations without SIMD
-    namespace ch5 {
-    namespace scanner {
-        enum class SimdLevel {
-            None,
-            SSE,
-            AVX2,
-            AVX512
-        };
-
-        // Scalar implementation (fallback)
-        inline size_t find_quote_pos(std::string_view text, size_t start = 0) noexcept {
-            return m64_parallel_find_quote_pos(text, start);
-        }
-
-        inline const char* scan_digits(std::string_view text, size_t start = 0) noexcept {
-            return m64_parallel_digits(text, start);
-        }
-    }
-    // No-SIMD build: keep API stable with no-op stubs
-    using scanner::SimdLevel;
-    inline void set_global_simd_override(scanner::SimdLevel) noexcept {}
-    inline void clear_global_simd_override() noexcept {}
-    inline void set_thread_simd_override(scanner::SimdLevel) noexcept {}
-    inline void clear_thread_simd_override() noexcept {}
-    inline scanner::SimdLevel effective_simd_level() noexcept { return scanner::SimdLevel::None; }
-    }
-#endif
-
-#endif // CPPON_SCANNER_H
+#endif // CPPON_SWAR_H
 
 /*
  * C++ON - High performance C++17 JSON parser with extended features
  * https://github.com/methanium/cppon
  *
- * File: c++on-parser.h : JSON parsing and evaluation facilities
+ * File: c++on-types.h : Core type definitions
  *
  * MIT License
  * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
@@ -4397,532 +3322,310 @@ inline size_t m64_parallel_skip_spaces_pos(std::string_view Text) noexcept {
  * See LICENSE file for complete license details
  */
 
-#ifndef CPPON_PARSER_H
-#define CPPON_PARSER_H
+#ifndef CPPON_TYPES_H
+#define CPPON_TYPES_H
 
 namespace ch5 {
 
-constexpr string_view_t path_prefix = CPPON_PATH_PREFIX;
-constexpr string_view_t blob_prefix = CPPON_BLOB_PREFIX;
-constexpr size_t object_min_reserve = CPPON_OBJECT_MIN_RESERVE;
-constexpr size_t array_min_reserve = CPPON_ARRAY_MIN_RESERVE;
+/**
+ * @brief Central utilities for managing cppon objects and their interconnections.
+ *
+ * This suite of utility functions is foundational to the cppon framework. It manages the current root
+ * context using a thread-local stack, provides a per-thread null sentinel, and enables consistent path
+ * resolution across nested traversals while keeping threads isolated.
+ *
+ * - Root stack and accessors:
+ *   - `push_root(const cppon&)` and `pop_root(const cppon&)`: Maintain a thread-local stack of roots.
+ *     push_root() pushes the given object if it is not already at the top; pop_root() pops it only if
+ *     it is the current top. This guarantees balanced push/pop in scoped contexts.
+ *   - `get_root()`: Returns a reference to the current root. Asserts that the stack is non-empty and
+ *     the top is non-null. Use this when resolving absolute paths or path_t values.
+ *   - `root_guard`: RAII helper that pushes a root on construction and pops it on destruction, ensuring
+ *     exception-safe stack balancing.
+ *
+ * - Invariants:
+ *   - The root stack is thread_local and never empty (the bottom entry is a per-thread null sentinel).
+ *   - The top entry must never be nullptr (enforced by assertions).
+ *   - Each root must be unique within the stack (no duplicates allowed).
+ *
+ * - Absolute paths and operator[]:
+ *   - When an index starts with '/', operator[] calls push_root(*this) and resolves the remainder of the
+ *     path against `get_root()`. Prefer `root_guard` when switching the root for a scope.
+ *
+ * - `visitor(cppon&, size_t)`, `visitor(cppon&, string_view_t)`, `visitor(const cppon&, size_t)`, and
+ *   `visitor(const cppon&, string_view_t)`: Provide mechanisms to access cppon objects by numeric index
+ *   or string path. Resolution of `path_t` segments is performed against the current root.
+ *
+ * - Threading:
+ *   - The root stack is per-thread (`thread_local`). Root changes are not visible across threads and
+ *     do not require external synchronization.
+ *
+ * @note Lifetime: `cppon::~cppon()` calls `pop_root(*this)` to keep the stack consistent in the presence
+ *       of temporaries or scoped objects.
+ *
+ * @warning Call `pop_root` only when you own the current top (typically via `root_guard` or the owning
+ *          object's lifetime). Do not attempt to manually pop non-top entries.
+ *
+ * Collectively, these utilities underscore the cppon framework's flexibility, robustness, and capability to represent
+ * and manage complex data structures and relationships. They are instrumental in ensuring that cppon objects can be
+ * dynamically linked, accessed, and manipulated within a coherent and stable framework.
+ */
 
-enum class options {
-    full,  // full evaluation, with blob conversion
-    eval,  // full evaluation, with conversion
-    quick, // text evaluation (no conversion)
-    parse  // parse only (validation)
+namespace roots {
+void push_root(const cppon& root);
+void pop_root(const cppon& root) noexcept;
+cppon& get_root() noexcept;
+}//namespace roots
+namespace visitors {
+cppon& visitor(cppon& object, size_t index);
+cppon& visitor(cppon& object, string_view_t index);
+const cppon& visitor(const cppon& object, size_t index);
+const cppon& visitor(const cppon& object, string_view_t index);
+}//namespace visitors
+
+class root_guard {
+    cppon& new_root;
+public:
+    root_guard(const cppon& new_root_arg) noexcept
+        : new_root(const_cast<cppon&>(new_root_arg)) {
+        roots::push_root(new_root);
+    }
+    ~root_guard() noexcept {
+        roots::pop_root(new_root);
+    }
 };
 
-constexpr options Full = options::full;
-constexpr options Eval = options::eval;
-constexpr options Quick = options::quick;
-constexpr options Parse = options::parse;
+// Type trait to check if a type is contained in a std::variant and is an r-value reference
+template<typename T, typename Variant>
+struct is_in_variant_rv;
 
-namespace parser {
+template<typename T, typename... Types>
+struct is_in_variant_rv<T, std::variant<Types...>>
+    : std::disjunction<std::is_same<std::decay_t<T>, Types>..., std::is_rvalue_reference<T>> {};
+
+// Type trait to check if a type is contained in a std::variant and is an l-value reference
+template<typename T, typename Variant>
+struct is_in_variant_lv;
+
+template<typename T, typename... Types>
+struct is_in_variant_lv<T, std::variant<Types...>>
+    : std::disjunction<std::is_same<std::decay_t<T>, Types>..., std::negation<std::is_rvalue_reference<T>>> {};
 
 /**
- * @brief Returns true if the character is considered whitespace.
+ * @brief The cppon class represents a versatile container for various types used within the cppon framework.
  *
- * Modes:
- * - Default (strict JSON): SPACE (0x20), TAB (0x09), LF (0x0A), CR (0x0D).
- * - With CPPON_TRUSTED_INPUT defined: any control byte in [0x01..0x20] is treated as whitespace
- *   (branchless fast path). The null byte ('\0') is never considered whitespace.
+ * This class extends from `value_t`, which is an alias for a `std::variant` that encapsulates all types managed by cppon.
+ * It provides several utility functions and operator overloads to facilitate dynamic type handling and hierarchical data
+ * structure manipulation.
  *
- * @param c Character to test.
- * @return true if c is whitespace according to the active mode; false otherwise.
+ * - `is_null()`: Checks if the current instance holds a null value.
+ *
+ * - `operator[](index_t index)`: Overloaded subscript operators for non-const and const contexts. These operators allow
+ *   access to nested cppon objects by index. If the root is null, the current instance is set as the root.
+ *
+ * - `operator=(const T& val)`: Template assignment operators for copying and moving values into the cppon instance.
+ *
+ * - `operator=(const char* val)`: Assignment operator for C-style strings, converting them to `string_view_t` before assignment.
+ *
+ * - `operator=(const string_t& val)`: Assignment operator for `string_t` type.
+ *
+ * The class leverages `std::visit` to handle the variant types dynamically, ensuring that the correct type-specific
+ * operations are performed. This design allows cppon to manage complex data structures and relationships efficiently.
  */
-inline bool is_space(char c) {
-#if defined(CPPON_TRUSTED_INPUT)
-    // Branchless: treat 0x01..0x20 as whitespace; '\0' excluded.
-    return static_cast<unsigned char>(c - 1) < 0x20u;
-#else
-    switch (static_cast<unsigned char>(c)) {
-    case 0x20: case 0x09: case 0x0A: case 0x0D: return true;
-    default: return false;
+
+class cppon : public value_t {
+public:
+    cppon() = default;
+    cppon(const cppon&) = default;
+    cppon(cppon&&) noexcept = default;
+    ~cppon() noexcept { roots::pop_root(*this); }
+    cppon& operator=(const cppon&) = default;
+    cppon& operator=(cppon&&) noexcept = default;
+
+    /**
+    * @brief Verifies that a cppon object is valid and throws an exception if it is not
+    *
+    * Helper that checks if a cppon object is not in the valueless_by_exception state,
+    * throwing an explicit exception if it is. This prevents undefined behavior
+    * by transforming a potential UB into a detectable logic error.
+    *
+    * @throws object_reference_lost_error if the object is invalid
+    */
+    inline bool check_valid() const noexcept {
+        if (valueless_by_exception()) {
+            CPPON_ASSERT(!"Reference lost: Object is in valueless_by_exception state");
+            return false;
+        }
+        return true;
     }
+    inline void ensure_valid() const {
+        if (!check_valid()) throw object_reference_lost_error{ "Object is in valueless_by_exception state" };
+    }
+
+    inline auto is_null() const -> bool {
+        ensure_valid();
+        return std::holds_alternative<nullptr_t>(*this);
+    }
+
+    inline auto operator[](string_view_t index)->cppon& {
+        ensure_valid();
+        CPPON_ASSERT(!index.empty() && "Index cannot be empty");
+        if (index.front() == '/') {
+            roots::push_root(*this);
+            return visitors::visitor(roots::get_root(), index.substr(1));
+        }
+        return visitors::visitor(*this, index);
+    }
+
+    inline auto operator[](string_view_t index)const->const cppon& {
+        ensure_valid();
+        CPPON_ASSERT(!index.empty() && "Index cannot be empty");
+        if (index.front() == '/') {
+            roots::push_root(*this);
+            return visitors::visitor(static_cast<const cppon&>(roots::get_root()), index.substr(1));
+        }
+        return visitors::visitor(*this, index);
+    }
+
+    inline auto operator[](size_t index)->cppon& {
+        ensure_valid();
+        return visitors::visitor(*this, index);
+    }
+
+    inline auto operator[](size_t index)const->const cppon& {
+        ensure_valid();
+        return visitors::visitor(*this, index);
+    }
+
+    inline auto& operator=(const char* val) {
+        ensure_valid();
+        value_t::operator=(string_view_t{ val });
+        return *this;
+    }
+
+    inline auto& operator=(pointer_t pointer) {
+        ensure_valid();
+        if (pointer && pointer->valueless_by_exception()) {
+            throw unsafe_pointer_assignment_error(
+                "RHS points to a valueless_by_exception object. "
+                "Sequence the operation or use path_t"
+            );
+        }
+        value_t::operator=( pointer );
+        return *this;
+    }
+
+    // Template for lvalue references, disabled for types not contained in value_t
+    template<
+        typename T,
+        typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+    inline auto& operator=(const T& val) {
+        ensure_valid();
+        value_t::operator=(val); return *this;
+    }
+
+    // Template for rvalue references, disabled for types not contained in value_t
+    template<
+        typename T,
+        typename = std::enable_if_t<is_in_variant_rv<T, value_t>::value>>
+    inline auto& operator=(T&& val) {
+        ensure_valid();
+        value_t::operator=(std::forward<T>(val)); return *this;
+    }
+
+    // Underlying container access (throws type_mismatch_error on wrong type)
+    inline auto array() -> array_t& {
+        ensure_valid();
+        if (auto p = std::get_if<array_t>(this)) return *p;
+        throw type_mismatch_error{ "array_t expected" };
+    }
+    inline auto array() const -> const array_t& {
+        ensure_valid();
+        if (auto p = std::get_if<array_t>(this)) return *p;
+        throw type_mismatch_error{ "array_t expected" };
+    }
+    inline auto object() -> object_t& {
+        ensure_valid();
+        if (auto p = std::get_if<object_t>(this)) return *p;
+        throw type_mismatch_error{ "object_t expected" };
+    }
+    inline auto object() const -> const object_t& {
+        ensure_valid();
+        if (auto p = std::get_if<object_t>(this)) return *p;
+        throw type_mismatch_error{ "object_t expected" };
+    }
+
+    // Optional non-throw helpers
+    inline auto try_array() noexcept -> array_t* { return check_valid() ? std::get_if<array_t>(this) : nullptr; }
+    inline auto try_array() const noexcept -> const array_t* { return check_valid() ? std::get_if<array_t>(this) : nullptr; }
+    inline auto try_object() noexcept -> object_t* { return check_valid() ? std::get_if<object_t>(this) : nullptr; }
+    inline auto try_object() const noexcept -> const object_t* { return check_valid() ? std::get_if<object_t>(this) : nullptr; }
+
+    // Array iteration
+    inline auto begin() { return array().begin(); }
+    inline auto end() { return array().end(); }
+    inline auto begin() const{ return array().begin(); }
+    inline auto end() const { return array().end(); }
+};
+
+template<
+    typename T,
+    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+inline bool operator==(const cppon& lhs, const T& rhs) noexcept {
+    if (lhs.valueless_by_exception())
+        return false;
+
+    // Vérifier si le type stocké correspond à T
+    const T* val = std::get_if<T>(&lhs);
+    if (!val)
+        return false;
+
+    // Comparer les valeurs
+    return *val == rhs;
+}
+template<
+    typename T,
+    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+inline bool operator==(const T& lhs, const cppon& rhs) noexcept {
+    if (rhs.valueless_by_exception())
+        return false;
+
+    // Vérifier si le type stocké correspond à T
+    const T* val = std::get_if<T>(&rhs);
+    if (!val)
+        return false;
+
+    // Comparer les valeurs
+    return lhs == *val;
+}
+
+template<
+    typename T,
+    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+inline bool operator!=(const cppon& lhs, const T& rhs) noexcept {
+    return !(lhs == rhs);
+}
+template<
+    typename T,
+    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+inline bool operator!=(const T& lhs, const cppon& rhs) noexcept {
+    return !(lhs == rhs);
+}
+
+#ifdef CPPON_ENABLE_STD_GET_INJECTION
+using std::get_if;
+using std::get;
 #endif
-}
-
-/**
- * @brief Advances past JSON whitespace and updates the position in place.
- *
- * Scans forward starting at 'pos' until the first non‑whitespace character or the
- * terminating '\0' sentinel is reached. Assumes the underlying buffer is null‑terminated
- * (as guaranteed by cppon).
- *
- * Whitespace definition:
- * - Default (strict JSON): SPACE (0x20), TAB (0x09), LF (0x0A), CR (0x0D).
- * - With CPPON_TRUSTED_INPUT defined: any control byte in [0x01..0x20] is treated as whitespace
- *   (branchless fast path). The null byte ('\0') is never considered whitespace.
- *
- * On success, 'pos' is set to the index of the first non‑whitespace character.
- * If end of text is reached before any non‑whitespace, throws unexpected_end_of_text_error.
- *
- * @param text Input text to scan (must be backed by a null‑terminated buffer).
- * @param pos  In/out byte offset where scanning starts; updated to the first non‑whitespace.
- * @param err  Context string used in the exception message on end of text.
- * @throws unexpected_end_of_text_error If only whitespace remains up to the sentinel.
- */
-inline void skip_spaces(string_view_t text, size_t& pos, const char* err) {
-    const char* scan = text.data() + pos;
-    if (is_space(*scan)) {
-        do
-            ++scan;
-        while (is_space(*scan));
-        pos = static_cast<size_t>(scan - text.data());
-    }
-    if (*scan)
-        return;
-    throw unexpected_end_of_text_error{ err };
-}
-
-/**
- * @brief Expects a specific character in the given text at the specified position.
- *
- * This function checks if the character at the specified position in the given text
- * matches the expected character.
- * If the characters do not match, an expected_symbol_error is thrown.
- *
- * @param text The text to check.
- * @param match The expected character.
- * @param pos The position in the text to check.
- *            'Pos' is updated to point to the next character after the expected character.
- *
- * @exception expected_symbol_error
- *            Thrown if the character at the specified position does not match the expected character.
- */
-inline auto expect(string_view_t text, char match, size_t& pos) {
-    auto scan{ text.data() + pos };
-    if (*scan != match)
-        throw expected_symbol_error{ string_view_t{ &match, 1 }, pos };
-    ++pos;
-}
-
-/**
-  * Forward declaration for arrays and objects
-  */
-inline auto accept_value(string_view_t text, size_t& pos, options opt) -> cppon;
-
-/**
- * @brief Accepts a specific entity ("null", "true", or "false") from the given text.
- *
- * This function accepts a specific entity from the given text at the specified position.
- * The entity can be one of the following: "null", "true", or "false".
- * The function updates the `Pos` to point to the next character after the accepted entity.
- *
- * @param Text The text to accept the entity from.
- * @param Pos The position in the text to start accepting the entity.
- *            `Pos` is updated to point to the next character after the accepted entity.
- * @return cppon An instance of `cppon` containing the accepted entity.
- *
- * @exception expected_symbol_error
- *            Thrown if the characters at the specified position is not a valid entity.
- */
-inline auto accept_null(string_view_t text, size_t& pos) -> cppon {
-    if (text.compare(pos, 4, "null") == 0) {
-        pos += 4;
-        return cppon{nullptr};
-    }
-    throw expected_symbol_error{"null", pos};
-}
-inline auto accept_true(string_view_t text, size_t& pos) -> cppon {
-    if (text.compare(pos, 4, "true") == 0) {
-        pos += 4;
-        return cppon{true};
-    }
-    throw expected_symbol_error{"true", pos};
-}
-inline auto accept_false(string_view_t text, size_t& pos) -> cppon {
-    if (text.compare(pos, 5, "false") == 0) {
-        pos += 5;
-        return cppon{false};
-    }
-    throw expected_symbol_error{"false", pos};
-}
-
-/**
- * @brief Extracts a string from a JSON text, handling escape sequences.
- *
- * This function analyzes the JSON text starting from the position specified by `pos`
- * to extract a string. It correctly handles escape sequences such as \" and \\",
- * allowing quotes and backslashes to be included in the resulting string. Other
- * escape sequences are left as is, without transformation.
- *
- * @param text The JSON text to analyze.
- * @param pos The starting position in the text for analysis.
- *            `pos` is updated to point after the extracted string at the end of the analysis.
- * @return cppon An instance of `cppon` containing the extracted string.
- *
- * @exception unexpected_end_of_text_error
- *            Thrown if the end of the text is reached before finding a closing quote.
- */
-inline auto accept_string(string_view_t text, size_t& pos, options opt) -> cppon {
-    /*< expect(text, '"', pos); already done in accept_value */
-    ++pos; // Advance the position to skip the opening quote
-    size_t peek, found = pos - 1;
-    do {
-        found = scanner::find_quote_pos(text, found + 1);
-
-        // If no quote is found and the end of the text is reached, throw an error
-        if (found == text.npos)
-            throw unexpected_end_of_text_error{ "string" };
-        // Check for escaped characters
-        peek = found;
-        while (peek != pos && text[peek - 1] == '\\')
-            --peek;
-    } while (found - peek & 1); // Continue if the number of backslashes is odd
-
-    // Update the position to point after the closing quote
-    peek = pos;
-    pos = found + 1;
-
-    // Return the extracted substring
-    auto value = text.substr(peek, found - peek);
-
-    if(!value.empty() && value.front() == '$') {
-        // If the path prefix is found, return a path object
-        if (value.rfind(path_prefix, 0) == 0)
-		    return cppon{ path_t{ value.substr(path_prefix.size()) } };
-
-        // If the blob prefix is found, return a blob object
-        if (value.rfind(blob_prefix, 0) == 0) {
-            if (opt == options::full)
-                // If the full option is set, return a blob object with the decoded value
-			    return cppon{ decode_base64(value.substr(blob_prefix.size())) };
-		    else
-                // Otherwise, return a blob object with the encoded value
-			    return cppon{ blob_string_t{ value.substr(blob_prefix.size()) } };
-        }
-	}
-
-    // Otherwise, return a string object
-    return cppon{ value };
-}
-
-/**
- * @brief Accepts a number from the given text at the specified position.
- *
- * This function accepts a number from the given text at the specified position.
- * The function updates the `pos` to point to the next character after the accepted number.
- * It handles different numeric formats based on the provided options.
- *
- * @param text The text to accept the number from.
- * @param pos The position in the text to start accepting the number.
- *            `pos` is updated to point to the next character after the accepted number.
- * @param opt The options for parsing the number, which determine the parsing behavior.
- * @return cppon An instance of `cppon` containing the accepted number.
- *
- * @exception unexpected_end_of_text_error
- *            Thrown if the end of the text is reached before finding a valid number.
- * @exception unexpected_symbol_error
- *            Thrown if an unexpected symbol is encountered while parsing the number.
- *
- * @note This function supports parsing of integers, floating-point numbers, and scientific notation.
- *       It uses the `convert_to_numeric` function to convert the parsed string to the appropriate numeric type.
- *       Although `convert_to_numeric` can throw `type_mismatch_error`, it is impossible in the context of this function
- *       because the input is always a valid numeric string when this function is called.
- */
-inline auto accept_number(string_view_t text, size_t& pos, options opt) -> cppon {
-   /**
-     * JSON compatible types:
-     * 0: int64  (without  suffix)
-     * 1: double (without  suffix, with decimal point or exponent, also for C++ types)
-     * Not JSON compatible types (C++ types):
-     * 2: float  (with f   suffix and with decimal point or exponent)
-     * 3: int8   (with i8  suffix)
-     * 4: uint8  (with u8  suffix)
-     * 5: int16  (with i16 suffix)
-     * 6: uint16 (with u16 suffix)
-     * 7: int32  (with i32 suffix)
-     * 8: uint32 (with u32 suffix)
-     • 9: int64  (with i/i64 suffix)
-     •10: uint64 (with u/u64 suffix)
-     */
-    auto type = NumberType::json_int64;
-    auto is_unsigned = false;
-    auto has_suffix = false;
-    auto start = pos;
-    auto scan = &text[start];
-    auto is_negative = scan[0] == '-';
-    auto is_zero = scan[is_negative] == '0';
-
-    scan += is_negative + is_zero;
-
-    if (!is_zero) {
-        const size_t ofs = static_cast<size_t>(scan - text.data());
-        scan = scanner::scan_digits(text, ofs);
-    }
-    if (!scan) throw unexpected_end_of_text_error{ "number" };
-    if (!(static_cast<unsigned char>(scan[-1] - '0') <= 9))
-        throw unexpected_symbol_error{ string_view_t{ &scan[-1], 1u }, size_t((scan - &text[start]) - 1u) };
-    // scan decimal point
-    if (*scan == '.' && (static_cast<unsigned char>(scan[1] - '0') <= 9)) {
-        // scan fractional part
-        ++scan;
-        const size_t ofs = static_cast<size_t>(scan - text.data());
-        scan = scanner::scan_digits(text, ofs);
-        if (!scan)
-            throw unexpected_end_of_text_error{ "number" };
-        type = NumberType::json_double; // double by default
-    }
-    else if (*scan == 'i' || *scan == 'I') {
-        // scan unsigned flag
-        ++scan;
-        has_suffix  = true;
-        is_unsigned = false;
-    }
-    else if (*scan == 'u' || *scan == 'U') {
-        // scan unsigned flag
-        ++scan;
-        has_suffix  = true;
-        is_unsigned = true;
-    }
-    // scan exponent
-    if (!has_suffix && (*scan == 'e' || *scan == 'E')) {
-        ++scan;
-        // scan exponent sign
-        if (*scan == '-' || *scan == '+') ++scan;
-        // scan exponent digits
-        while ((static_cast<unsigned char>(*scan - '0') <= 9))
-            ++scan;
-        if (!(static_cast<unsigned char>(scan[-1] - '0') <= 9))
-            throw unexpected_symbol_error{ string_view_t{ &scan[-1], 1u },  size_t((scan - &text[pos]) - 1u) };
-        type = NumberType::json_double; // double by default
-    }
-    if (type == NumberType::json_double && (*scan == 'f' || *scan == 'F')) {
-		++scan;
-		type = NumberType::cpp_float;
-    }
-    else if (has_suffix) {
-        switch(*scan) {
-        case '1':
-			++scan;
-			if (!*scan) throw unexpected_end_of_text_error{ "number" };
-			if (*scan != '6') throw unexpected_symbol_error{ string_view_t{ scan, 1u }, size_t(scan - &text[start]) };
-			++scan; type = NumberType::cpp_int16; break;
-        case '3':
-			++scan;
-			if (!*scan) throw unexpected_end_of_text_error{ "number" };
-			if (*scan != '2') throw unexpected_symbol_error{ string_view_t{ scan, 1u }, size_t(scan - &text[start]) };
-			++scan; type = NumberType::cpp_int32; break;
-        case '6':
-			++scan;
-			if (!*scan) throw unexpected_end_of_text_error{ "number" };
-			if (*scan != '4') throw unexpected_symbol_error{ string_view_t{ scan, 1u }, size_t(scan - &text[start]) };
-			++scan; type = NumberType::cpp_int64; break;
-        case '8':
-			++scan; type = NumberType::cpp_int8; break;
-        default:
-            // unnumbered suffix (i or u) defaults to cpp_int64/cpp_uint64
-            type = NumberType::cpp_int64; break;
-        }
-	    if (is_unsigned) type = static_cast<NumberType>(static_cast<int>(type) + 1);
-    }
-    auto scan_size = scan - &text[start];
-    pos += scan_size;
-
-    cppon value{ number_t{ text.substr(start, scan_size), type } };
-
-    if (opt < options::quick) // options:{full,eval}
-        convert_to_numeric(value);
-
-    return value;
-}
-
-/**
- * @brief Accepts an array from the given text at the specified position.
- *
- * This function accepts an array from the given text at the specified position.
- * An array can contain multiple values separated by commas.
- * The function updates the `pos` to point to the next character after the accepted array.
- *
- * @param text The text to accept the array from.
- * @param pos The position in the text to start accepting the array.
- *            `pos` is updated to point to the next character after the accepted array.
- * @param opt The options for parsing the array.
- * @return cppon An instance of `cppon` containing the accepted array.
- *
- * @exception unexpected_end_of_text_error
- *            Thrown if the end of the text is reached before finding a closing bracket for the array.
- * @exception unexpected_symbol_error
- *            Thrown if an unexpected symbol is encountered while parsing the array.
- */
-inline auto accept_array(string_view_t text, size_t& pos, options opt) -> cppon {
-    ++pos;
-    skip_spaces(text, pos, "array");
-    if (text[pos] == ']') {
-        ++pos; // empty array
-        return cppon{ array_t{} };
-    }
-    array_t array;
-    if (opt != options::parse) // options:{eval,quick}
-        array.reserve(array_min_reserve);
-    do {
-        skip_spaces(text, pos, "array");
-        auto value = accept_value(text, pos, opt);
-        skip_spaces(text, pos, "array");
-        if (opt != options::parse) // options:{eval,quick}
-            array.emplace_back(std::move(value));
-    } while (text[pos] == ',' && ++pos);
-    expect(text, ']', pos);
-    return cppon{ std::move(array) };
-}
-
-/**
- * @brief Accepts an object from the given text at the specified position.
- *
- * This function accepts an object from the given text at the specified position.
- * An object contains key-value pairs separated by commas.
- * The function updates the `pos` to point to the next character after the accepted object.
- *
- * @param text The text to accept the object from.
- * @param pos The position in the text to start accepting the object.
- *            `pos` is updated to point to the next character after the accepted object.
- * @param opt The options for parsing the object.
- * @return cppon An instance of `cppon` containing the accepted object.
- *
- * @exception unexpected_end_of_text_error
- *            Thrown if the end of the text is reached before finding a closing brace for the object.
- * @exception unexpected_symbol_error
- *            Thrown if an unexpected symbol is encountered while parsing the object.
- */
-inline auto accept_object(string_view_t text, size_t& pos, options opt) -> cppon {
-     ++pos;
-    skip_spaces(text, pos, "object");
-    if (text[pos] == '}') {
-        ++pos; // empty object
-        return cppon{ object_t{} };
-    }
-    object_t object;
-    if (opt != options::parse) // options:{eval,quick}
-        object.reserve(object_min_reserve);
-    do {
-        skip_spaces(text, pos, "object");
-        auto key = accept_string(text, pos, opt);
-        skip_spaces(text, pos, "object");
-        expect(text, ':', pos);
-        skip_spaces(text, pos, "object");
-        auto value = accept_value(text, pos, opt);
-        skip_spaces(text, pos, "object");
-        if (opt != options::parse) // options:{eval,quick}
-            object.emplace_back(std::get<string_view_t>(key), std::move(value));
-    } while (text[pos] == ',' && ++pos);
-    expect(text, '}', pos);
-    return cppon{ std::move(object) };
-}
-
-/**
- * @brief Accepts a value from the given text at the specified position.
- *
- * This function accepts a value from the given text at the specified position.
- * The value can be a string, number, object, array, true, false, or null.
- * The function updates the `pos` to point to the next character after the accepted value.
- *
- * @param text The text to accept the value from.
- * @param pos The position in the text to start accepting the value.
- *            `pos` is updated to point to the next character after the accepted value.
- * @param opt The options for parsing the value.
- * @return cppon An instance of `cppon` containing the accepted value.
- *
- * @exception unexpected_end_of_text_error
- *            Thrown if the end of the text is reached before finding a valid value.
- * @exception unexpected_symbol_error
- *            Thrown if an unexpected symbol is encountered while parsing the value.
- */
-inline auto accept_value(string_view_t text, size_t& pos, options opt) -> cppon {
-    switch (text[pos]) {
-    case '"': return accept_string(text, pos, opt);
-    case '{': return accept_object(text, pos, opt);
-    case '[': return accept_array(text, pos, opt);
-    case 'n': return accept_null(text, pos);
-    case 't': return accept_true(text, pos);
-    case 'f': return accept_false(text, pos);
-    case '-': case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-        return accept_number(text, pos, opt);
-    default:
-        throw unexpected_symbol_error{ text.substr(pos, 1), pos };
-    }
-}
-
-/**
- * @brief Evaluates a JSON text and returns the corresponding cppon structure.
- *
- * This function evaluates a JSON text and returns the corresponding cppon structure.
- * The JSON text is passed as a string view, and the options parameter allows for different
- * evaluation modes: Eval (full evaluation), Quick (text evaluation without conversion), and
- * Parse (parse only for validation).
- *
- * @param text The JSON text to evaluate.
- * @param opt The options for evaluating the JSON text. Default is Eval.
- * @return cppon The cppon structure representing the evaluated JSON text.
- */
-inline auto eval(string_view_t text, options opt = Eval) -> cppon {
-    if (text.empty())
-        return cppon{ nullptr };
-
-    if (text.size() >= 4 &&
-        ((static_cast<unsigned char>(text[0]) == 0x00 && static_cast<unsigned char>(text[1]) == 0x00 &&
-          static_cast<unsigned char>(text[2]) == 0xFE && static_cast<unsigned char>(text[3]) == 0xFF) ||
-         (static_cast<unsigned char>(text[0]) == 0xFF && static_cast<unsigned char>(text[1]) == 0xFE &&
-          static_cast<unsigned char>(text[2]) == 0x00 && static_cast<unsigned char>(text[3]) == 0x00))) {
-        // UTF-32 BOM (not supported)
-        throw unexpected_utf32_BOM_error{};
-    }
-    if (text.size() >= 2 &&
-        // UTF-16 BOM (not supported)
-        ((static_cast<unsigned char>(text[0]) == 0xFE && static_cast<unsigned char>(text[1]) == 0xFF) ||
-         (static_cast<unsigned char>(text[0]) == 0xFF && static_cast<unsigned char>(text[1]) == 0xFE))) {
-        throw unexpected_utf16_BOM_error{};
-    }
-    if ((static_cast<unsigned char>(text[0]) & 0xF8) == 0xF8) {
-        // 5 or 6 byte sequence, not valid in UTF-8
-        throw invalid_utf8_sequence_error{};
-    }
-    if ((static_cast<unsigned char>(text[0]) & 0xC0) == 0x80) {
-        // continuation byte, not valid as first byte
-        throw invalid_utf8_continuation_error{};
-    }
-
-    // At this point, only valid UTF-8 sequences remain:
-    //   - ASCII bytes     (0xxxxxxx)       : (text[0] & 0x80) == 0x00
-    //   - 2-byte sequence (110xxxxx)       : (text[0] & 0xE0) == 0xC0
-    //   - 3-byte sequence (1110xxxx)       : (text[0] & 0xF0) == 0xE0
-    //   - 4-byte sequence (11110xxx)       : (text[0] & 0xF8) == 0xF0
-
-    // accept UTF-8 BOM
-    if (text.size() >= 3 &&
-        static_cast<unsigned char>(text[0]) == 0xEF &&
-        static_cast<unsigned char>(text[1]) == 0xBB &&
-        static_cast<unsigned char>(text[2]) == 0xBF) {
-        text.remove_prefix(3);
-    }
-
-    size_t pos{};
-    skip_spaces(text, pos, "eval");
-
-    // accept any value, not object only
-    return accept_value(text, pos, opt);
-}
-template<size_t N>
-inline auto eval(const char (&text)[N], options opt = Eval) -> cppon {
-	return eval(string_view_t{ text, N ? N - 1 : 0 }, opt);
-}
-
-}//namespace parser
-
-using parser::eval;
 
 }//namespace ch5
 
-
-#endif // CPPON_PARSER_H
+#endif //CPPON_TYPES_H
 
 /*
  * C++ON - High performance C++17 JSON parser with extended features
  * https://github.com/methanium/cppon
  *
- * File: c++on-literals.h : C++ON User-defined literals
+ * File: c++on-thread.h : C++ON thread local state and SIMD utilities
  *
  * MIT License
  * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
@@ -4930,67 +3633,147 @@ using parser::eval;
  * See LICENSE file for complete license details
  */
 
-#ifndef CPPON_LITERALS_H
-#define CPPON_LITERALS_H
+#ifndef CPPON_THREAD_H
+#define CPPON_THREAD_H
 
-// Inputs used by the parser must be NUL-terminated (sentinel '\0' readable at data()[size()]).
-// UDLs below rely on const char* (no size_t) to preserve that invariant. For raw binary blobs,
-// use (const char*, size_t) because embedded 0x00 are expected.
+#if CPPON_USE_SIMD
+#endif
 
 namespace ch5 {
-namespace literals {
+enum class SimdLevel {
+    None,
+    SSE,
+    AVX2,
+    AVX512
+};
 
-// Parse a JSON string literal to a cppon (full eval, blobs not decoded)
-inline cppon operator"" _cpponf(const char* s, size_t n) {
-    return eval(string_view_t{s, n}, options::eval);
+#if CPPON_USE_SIMD
+namespace scanner {
+using find_quote_fn = size_t(*)(std::string_view, size_t);
+using scan_digits_fn = const char* (*)(std::string_view, size_t);
+inline void ensure_dispatch_bound() noexcept;
+inline find_quote_fn bind_find_quote_pos(SimdLevel lvl) noexcept;
+inline scan_digits_fn bind_parallel_digits(SimdLevel lvl) noexcept;
 }
-
-// Parse a JSON string literal to a cppon (quick: lazy numbers)
-inline cppon operator"" _cppon(const char* s, size_t n) {
-    return eval(string_view_t{s, n}, options::quick);
-}
-
-// Parse an options object literal for to_string(...)
-inline cppon operator"" _options(const char* s, size_t n) {
-    return eval(string_view_t{s, n}, options::eval);
-}
-
-// Build a path_t from "/..."
-inline path_t operator"" _path(const char* s, size_t n) {
-#ifndef NDEBUG
-    CPPON_ASSERT(s && s[0] == '/'); // path literals must start with '/'
 #endif
-    return path_t{ string_view_t{s, n} };
+
+#if CPPON_USE_SIMD
+namespace global {
+inline static std::atomic<int> g_simd_override_global{ -1 };
+}
+#endif
+
+namespace thread {
+
+template<typename T>
+struct config_var {
+    cppon current;
+    config_var(const T& v) : current{ v } {}
+    operator T& () { return std::get<T>(current); }
+    operator const T& () const { return std::get<T>(current); }
+};
+
+inline SimdLevel effective_simd_level() noexcept;
+
+inline namespace storage {
+inline static thread_local std::vector<cppon*> stack{ nullptr }; // stack first
+inline static thread_local cppon null{ nullptr }; // null second
+inline static thread_local printer_state::state printer;
+#if CPPON_USE_SIMD
+inline static thread_local SimdLevel max_simd_level = ([]() noexcept -> SimdLevel {
+    platform::processor_features_info cpu_info;
+    auto features = cpu_info.cpu_features();
+    if (features.AVX512F) return SimdLevel::AVX512;
+    if (features.AVX2)    return SimdLevel::AVX2;
+    if (features.SSE4_2)  return SimdLevel::SSE;
+    return SimdLevel::None;
+    })();
+inline static thread_local scanner::find_quote_fn p_find_quote = scanner::bind_find_quote_pos(max_simd_level);
+inline static thread_local scanner::scan_digits_fn p_scan_digits = scanner::bind_parallel_digits(max_simd_level);
+#else
+inline static thread_local SimdLevel max_simd_level = SimdLevel::None;
+#endif
+inline static thread_local config_var<int64_t> object_min_reserve{ CPPON_OBJECT_MIN_RESERVE };
+inline static thread_local config_var<int64_t> array_min_reserve{ CPPON_ARRAY_MIN_RESERVE };
+inline static thread_local config_var<int64_t> printer_reserve_per_element{ CPPON_PRINTER_RESERVE_PER_ELEMENT };
+inline static thread_local config_var<string_view_t> path_prefix{ CPPON_PATH_PREFIX };
+inline static thread_local config_var<string_view_t> blob_prefix{ CPPON_BLOB_PREFIX };
+inline static thread_local config_var<string_view_t> number_prefix{ CPPON_NUMBER_PREFIX };
+inline static thread_local config_var<int64_t> simd_override_thread{ (int64_t)-1 };
+inline static thread_local config_var<int64_t> simd_default{ (int64_t)effective_simd_level() };
+inline static thread_local config_var<boolean_t> exact_number_mode{ false };
 }
 
-// Build a blob_string_t from base64 text (undecoded)
-inline blob_string_t operator"" _blob64(const char* s, size_t n) {
-    return blob_string_t{ string_view_t{s, n} };
+inline static auto& get_printer_state() noexcept {
+    return printer;
 }
 
-// Build a raw binary blob (blob_t) directly from the literal bytes
-inline blob_t operator"" _blob(const char* s, size_t n) {
-    return blob_t{ reinterpret_cast<const uint8_t*>(s), reinterpret_cast<const uint8_t*>(s) + n };
+#if CPPON_USE_SIMD
+// Global process-wide override; -1 = none
+inline SimdLevel cap_to_supported(SimdLevel lvl) noexcept {
+    return (static_cast<int>(lvl) <= static_cast<int>(max_simd_level)) ? lvl : max_simd_level;
+}
+inline void set_simd_override_global(SimdLevel lvl) noexcept {
+    global::g_simd_override_global.store(static_cast<int>(cap_to_supported(lvl)), std::memory_order_relaxed);
+    scanner::ensure_dispatch_bound();
+}
+inline void clear_simd_override_global() noexcept {
+    global::g_simd_override_global.store(-1, std::memory_order_relaxed);
+    scanner::ensure_dispatch_bound();
+}
+inline void set_simd_override_thread(SimdLevel lvl) noexcept {
+    simd_override_thread = static_cast<int>(cap_to_supported(lvl));
+    scanner::ensure_dispatch_bound();
+}
+inline void clear_simd_override_thread() noexcept {
+    simd_override_thread = -1;
+    scanner::ensure_dispatch_bound();
+}
+inline bool has_simd_override() noexcept {
+    return simd_override_thread >= 0 || global::g_simd_override_global.load(std::memory_order_relaxed) >= 0;
+}
+inline SimdLevel current_simd_override() noexcept {
+    if (simd_override_thread >= 0)
+        return static_cast<SimdLevel>(static_cast<int64_t>(simd_override_thread));
+    int v = global::g_simd_override_global.load(std::memory_order_relaxed);
+    return v < 0 ? SimdLevel::None : static_cast<SimdLevel>(v);
+}
+inline SimdLevel detect_simd_level() noexcept {
+    if (has_simd_override()) { // Honor override first
+        return cap_to_supported(current_simd_override());
+    }
+    return max_simd_level;
 }
 
-// ------------------------------------------------------------
-// Optional aliases (more idiomatic names, forward to above):
-//   _jsonf -> _cpponf
-//   _json  -> _cppon
-//   _opts  -> _options
-//   _b64   -> _blob64
-// Keep both for ergonomics and doc alignment.
-// ------------------------------------------------------------
-inline cppon operator"" _jsonf(const char* s, size_t n) { return operator"" _cpponf(s, n); }
-inline cppon operator"" _json(const char* s, size_t n) { return operator"" _cppon(s, n); }
-inline cppon operator"" _opts(const char* s, size_t n) { return operator"" _options(s, n); }
-inline blob_string_t operator"" _b64(const char* s, size_t n) { return operator"" _blob64(s, n); }
+// Public export of SIMD override helpers at ch5 scope
+inline void set_global_simd_override(SimdLevel lvl) noexcept {
+    set_simd_override_global(lvl);
+}
+inline void clear_global_simd_override() noexcept {
+    clear_simd_override_global();
+}
+inline void set_thread_simd_override(SimdLevel lvl) noexcept {
+    set_simd_override_thread(lvl);
+}
+inline void clear_thread_simd_override() noexcept {
+    clear_simd_override_thread();
+}
+inline SimdLevel effective_simd_level() noexcept {
+    return detect_simd_level();
+}
+#else
+// No-SIMD build: keep API stable with no-op stubs
+inline void set_global_simd_override(SimdLevel) noexcept {}
+inline void clear_global_simd_override() noexcept {}
+inline void set_thread_simd_override(SimdLevel) noexcept {}
+inline void clear_thread_simd_override() noexcept {}
+inline SimdLevel effective_simd_level() noexcept { return SimdLevel::None; }
+#endif
 
-} // namespace literals
+} // namespace thread
 } // namespace ch5
 
-
-#endif // CPPON_LITERALS_H
+#endif // CPPON_THREAD_H
 
 /*
  * C++ON - High performance C++17 JSON parser with extended features
@@ -5201,6 +3984,646 @@ using details::restore_paths;
  * C++ON - High performance C++17 JSON parser with extended features
  * https://github.com/methanium/cppon
  *
+ * File: c++on-scanner.h : C++ON Scanner dispatch and utilities
+ *
+ * MIT License
+ * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
+ *
+ * See LICENSE file for complete license details
+ */
+
+#ifndef CPPON_SCANNER_H
+#define CPPON_SCANNER_H
+
+#if CPPON_USE_SIMD
+    namespace ch5 {
+    namespace scanner {
+        // Dynamic detection of SIMD capabilities
+
+        // Lazily bound function pointer dispatch
+        using find_quote_fn = size_t(*)(std::string_view, size_t);
+        using scan_digits_fn = const char* (*)(std::string_view, size_t);
+
+        inline find_quote_fn bind_find_quote_pos(SimdLevel lvl) noexcept {
+            switch (lvl) {
+            case SimdLevel::AVX512: return simd::zmm_parallel_find_quote_pos;
+            case SimdLevel::AVX2:   return simd::ymm_parallel_find_quote_pos;
+            case SimdLevel::SSE:    return simd::xmm_parallel_find_quote_pos;
+            default:                return m64_parallel_find_quote_pos;
+            }
+        }
+        inline scan_digits_fn bind_parallel_digits(SimdLevel lvl) noexcept {
+            switch (lvl) {
+            case SimdLevel::AVX512: return simd::zmm_parallel_digits;
+            case SimdLevel::AVX2:   return simd::ymm_parallel_digits;
+            case SimdLevel::SSE:    return simd::xmm_parallel_digits;
+            default:                return m64_parallel_digits;
+            }
+        }
+
+        inline void bind_dispatch(SimdLevel lvl) noexcept {
+            thread::p_find_quote = bind_find_quote_pos(lvl);
+            thread::p_scan_digits = bind_parallel_digits(lvl);
+        }
+
+
+        inline void ensure_dispatch_bound() noexcept {
+            bind_dispatch(thread::detect_simd_level());
+        }
+
+        // Hot-path APIs
+        inline size_t find_quote_pos(std::string_view text, size_t start = 0) noexcept {
+            return thread::p_find_quote(text, start);
+        }
+
+        inline const char* scan_digits(std::string_view text, size_t start = 0) noexcept {
+            return thread::p_scan_digits(text, start);
+        }
+    }
+    }
+#else
+    // Implementations without SIMD
+    namespace ch5 {
+    namespace scanner {
+
+        // Scalar implementation (fallback)
+        inline size_t find_quote_pos(std::string_view text, size_t start = 0) noexcept {
+            return m64_parallel_find_quote_pos(text, start);
+        }
+
+        inline const char* scan_digits(std::string_view text, size_t start = 0) noexcept {
+            return m64_parallel_digits(text, start);
+        }
+    }
+    }
+#endif
+
+#endif // CPPON_SCANNER_H
+
+/*
+ * C++ON - High performance C++17 JSON parser with extended features
+ * https://github.com/methanium/cppon
+ *
+ * File: c++on-parser.h : JSON parsing and evaluation facilities
+ *
+ * MIT License
+ * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
+ *
+ * See LICENSE file for complete license details
+ */
+
+#ifndef CPPON_PARSER_H
+#define CPPON_PARSER_H
+
+namespace ch5 {
+
+enum class options {
+    full,  // full evaluation, with blob conversion
+    eval,  // full evaluation, with conversion
+    quick, // text evaluation (no conversion)
+    parse  // parse only (validation)
+};
+
+constexpr options Full = options::full;
+constexpr options Eval = options::eval;
+constexpr options Quick = options::quick;
+constexpr options Parse = options::parse;
+
+namespace parser {
+
+/**
+ * @brief Returns true if the character is considered whitespace.
+ *
+ * Modes:
+ * - Default (strict JSON): SPACE (0x20), TAB (0x09), LF (0x0A), CR (0x0D).
+ * - With CPPON_TRUSTED_INPUT defined: any control byte in [0x01..0x20] is treated as whitespace
+ *   (branchless fast path). The null byte ('\0') is never considered whitespace.
+ *
+ * @param c Character to test.
+ * @return true if c is whitespace according to the active mode; false otherwise.
+ */
+inline bool is_space(char c) {
+#if defined(CPPON_TRUSTED_INPUT)
+    // Branchless: treat 0x01..0x20 as whitespace; '\0' excluded.
+    return static_cast<unsigned char>(c - 1) < 0x20u;
+#else
+    switch (static_cast<unsigned char>(c)) {
+    case 0x20: case 0x09: case 0x0A: case 0x0D: return true;
+    default: return false;
+    }
+#endif
+}
+
+/**
+ * @brief Advances past JSON whitespace and updates the position in place.
+ *
+ * Scans forward starting at 'pos' until the first non‑whitespace character or the
+ * terminating '\0' sentinel is reached. Assumes the underlying buffer is null‑terminated
+ * (as guaranteed by cppon).
+ *
+ * Whitespace definition:
+ * - Default (strict JSON): SPACE (0x20), TAB (0x09), LF (0x0A), CR (0x0D).
+ * - With CPPON_TRUSTED_INPUT defined: any control byte in [0x01..0x20] is treated as whitespace
+ *   (branchless fast path). The null byte ('\0') is never considered whitespace.
+ *
+ * On success, 'pos' is set to the index of the first non‑whitespace character.
+ * If end of text is reached before any non‑whitespace, throws unexpected_end_of_text_error.
+ *
+ * @param text Input text to scan (must be backed by a null‑terminated buffer).
+ * @param pos  In/out byte offset where scanning starts; updated to the first non‑whitespace.
+ * @param err  Context string used in the exception message on end of text.
+ * @throws unexpected_end_of_text_error If only whitespace remains up to the sentinel.
+ */
+inline void skip_spaces(string_view_t text, size_t& pos, const char* err) {
+    const char* scan = text.data() + pos;
+    if (is_space(*scan)) {
+        do
+            ++scan;
+        while (is_space(*scan));
+        pos = static_cast<size_t>(scan - text.data());
+    }
+    if (*scan)
+        return;
+    throw unexpected_end_of_text_error{ err };
+}
+
+/**
+ * @brief Expects a specific character in the given text at the specified position.
+ *
+ * This function checks if the character at the specified position in the given text
+ * matches the expected character.
+ * If the characters do not match, an expected_symbol_error is thrown.
+ *
+ * @param text The text to check.
+ * @param match The expected character.
+ * @param pos The position in the text to check.
+ *            'Pos' is updated to point to the next character after the expected character.
+ *
+ * @exception expected_symbol_error
+ *            Thrown if the character at the specified position does not match the expected character.
+ */
+inline auto expect(string_view_t text, char match, size_t& pos) {
+    auto scan{ text.data() + pos };
+    if (*scan != match)
+        throw expected_symbol_error{ string_view_t{ &match, 1 }, pos };
+    ++pos;
+}
+
+/**
+  * Forward declaration for arrays and objects
+  */
+inline auto accept_value(string_view_t text, size_t& pos, options opt) -> cppon;
+
+/**
+ * @brief Accepts a specific entity ("null", "true", or "false") from the given text.
+ *
+ * This function accepts a specific entity from the given text at the specified position.
+ * The entity can be one of the following: "null", "true", or "false".
+ * The function updates the `Pos` to point to the next character after the accepted entity.
+ *
+ * @param Text The text to accept the entity from.
+ * @param Pos The position in the text to start accepting the entity.
+ *            `Pos` is updated to point to the next character after the accepted entity.
+ * @return cppon An instance of `cppon` containing the accepted entity.
+ *
+ * @exception expected_symbol_error
+ *            Thrown if the characters at the specified position is not a valid entity.
+ */
+inline auto accept_null(string_view_t text, size_t& pos) -> cppon {
+    if (text.compare(pos, 4, "null") == 0) {
+        pos += 4;
+        return cppon{nullptr};
+    }
+    throw expected_symbol_error{"null", pos};
+}
+inline auto accept_true(string_view_t text, size_t& pos) -> cppon {
+    if (text.compare(pos, 4, "true") == 0) {
+        pos += 4;
+        return cppon{true};
+    }
+    throw expected_symbol_error{"true", pos};
+}
+inline auto accept_false(string_view_t text, size_t& pos) -> cppon {
+    if (text.compare(pos, 5, "false") == 0) {
+        pos += 5;
+        return cppon{false};
+    }
+    throw expected_symbol_error{"false", pos};
+}
+
+/**
+ * @brief Extracts a string from a JSON text, handling escape sequences.
+ *
+ * This function analyzes the JSON text starting from the position specified by `pos`
+ * to extract a string. It correctly handles escape sequences such as \" and \\",
+ * allowing quotes and backslashes to be included in the resulting string. Other
+ * escape sequences are left as is, without transformation.
+ *
+ * @param text The JSON text to analyze.
+ * @param pos The starting position in the text for analysis.
+ *            `pos` is updated to point after the extracted string at the end of the analysis.
+ * @return cppon An instance of `cppon` containing the extracted string.
+ *
+ * @exception unexpected_end_of_text_error
+ *            Thrown if the end of the text is reached before finding a closing quote.
+ */
+inline auto accept_string(string_view_t text, size_t& pos, options opt) -> cppon {
+    /*< expect(text, '"', pos); already done in accept_value */
+    ++pos; // Advance the position to skip the opening quote
+    size_t peek, found = pos - 1;
+    do {
+        found = scanner::find_quote_pos(text, found + 1);
+
+        // If no quote is found and the end of the text is reached, throw an error
+        if (found == text.npos)
+            throw unexpected_end_of_text_error{ "string" };
+        // Check for escaped characters
+        peek = found;
+        while (peek != pos && text[peek - 1] == '\\')
+            --peek;
+    } while (found - peek & 1); // Continue if the number of backslashes is odd
+
+    // Update the position to point after the closing quote
+    peek = pos;
+    pos = found + 1;
+
+    // Return the extracted substring
+    auto value = text.substr(peek, found - peek);
+
+    if(!value.empty() && value.front() == '$') {
+        // If the path prefix is found, return a path object
+        if (value.rfind(thread::path_prefix, 0) == 0)
+		    return cppon{ path_t{ value.substr(std::size<string_view_t>(thread::path_prefix)) } };
+
+        // If the blob prefix is found, return a blob object
+        if (value.rfind(thread::blob_prefix, 0) == 0) {
+            if (opt == options::full)
+                // If the full option is set, return a blob object with the decoded value
+			    return cppon{ decode_base64(value.substr(std::size<string_view_t>(thread::blob_prefix))) };
+		    else
+                // Otherwise, return a blob object with the encoded value
+			    return cppon{ blob_string_t{ value.substr(std::size<string_view_t>(thread::blob_prefix)) } };
+        }
+
+        if (value.rfind(thread::number_prefix, 0) == 0) {
+            std::array<string_view_t, 11> types{
+                "int64", "double", "float", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64"
+            };
+            auto TypedValue{ value.substr(std::size<string_view_t>(thread::number_prefix)) };
+            auto lPar = TypedValue.find('(');
+            if (lPar == TypedValue.npos) throw expected_symbol_error{ "(", found };
+            auto rPar = TypedValue.rfind(')');
+            if (rPar == TypedValue.npos) throw expected_symbol_error{ ")", found };
+            auto Type = TypedValue.substr(0, lPar);
+            if (Type.empty()) throw expected_symbol_error{ "type", peek + lPar };
+            auto found = std::find(types.begin(), types.end(), Type);
+            if (found == types.end()) throw expected_symbol_error{ "type", peek + lPar };
+            auto Number = TypedValue.substr(lPar + 1, rPar - lPar - 1);
+            if (Number.empty()) throw expected_symbol_error{ "number", peek + lPar + 1 };
+			NumberType index = static_cast<NumberType>(std::distance(types.begin(), found));
+            switch (index) {
+                case NumberType::json_int64: return cppon{ number_t{ Number, NumberType::json_int64 } };
+				case NumberType::json_double: return cppon{ number_t{ Number, NumberType::json_double } };
+				case NumberType::cpp_float: return cppon{ number_t{ Number, NumberType::cpp_float } };
+				case NumberType::cpp_int8: return cppon{ number_t{ Number, NumberType::cpp_int8 } };
+				case NumberType::cpp_uint8: return cppon{ number_t{ Number, NumberType::cpp_uint8 } };
+				case NumberType::cpp_int16: return cppon{ number_t{ Number, NumberType::cpp_int16 } };
+                case NumberType::cpp_uint16: return cppon{ number_t{ Number, NumberType::cpp_uint16 } };
+                case NumberType::cpp_int32: return cppon{ number_t{ Number, NumberType::cpp_int32 } };
+                case NumberType::cpp_uint32: return cppon{ number_t{ Number, NumberType::cpp_uint32 } };
+                case NumberType::cpp_int64: return cppon{ number_t{ Number, NumberType::cpp_int64 } };
+                case NumberType::cpp_uint64: return cppon{ number_t{ Number, NumberType::cpp_uint64 } };
+                default: throw type_mismatch_error{ "Invalid number type" };
+            }
+        }
+	}
+
+    // Otherwise, return a string object
+    return cppon{ value };
+}
+
+/**
+ * @brief Accepts a number from the given text at the specified position.
+ *
+ * This function accepts a number from the given text at the specified position.
+ * The function updates the `pos` to point to the next character after the accepted number.
+ * It handles different numeric formats based on the provided options.
+ *
+ * @param text The text to accept the number from.
+ * @param pos The position in the text to start accepting the number.
+ *            `pos` is updated to point to the next character after the accepted number.
+ * @param opt The options for parsing the number, which determine the parsing behavior.
+ * @return cppon An instance of `cppon` containing the accepted number.
+ *
+ * @exception unexpected_end_of_text_error
+ *            Thrown if the end of the text is reached before finding a valid number.
+ * @exception unexpected_symbol_error
+ *            Thrown if an unexpected symbol is encountered while parsing the number.
+ *
+ * @note This function supports parsing of integers, floating-point numbers, and scientific notation.
+ *       It uses the `convert_to_numeric` function to convert the parsed string to the appropriate numeric type.
+ *       Although `convert_to_numeric` can throw `type_mismatch_error`, it is impossible in the context of this function
+ *       because the input is always a valid numeric string when this function is called.
+ */
+inline auto accept_number(string_view_t text, size_t& pos, options opt) -> cppon {
+   /**
+     * JSON compatible types:
+     * 0: int64  (without  suffix)
+     * 1: double (without  suffix, with decimal point or exponent, also for C++ types)
+     * Not JSON compatible types (C++ types):
+     * 2: float  (with f   suffix and with decimal point or exponent)
+     * 3: int8   (with i8  suffix)
+     * 4: uint8  (with u8  suffix)
+     * 5: int16  (with i16 suffix)
+     * 6: uint16 (with u16 suffix)
+     * 7: int32  (with i32 suffix)
+     * 8: uint32 (with u32 suffix)
+     • 9: int64  (with i/i64 suffix)
+     •10: uint64 (with u/u64 suffix)
+     */
+    auto type = NumberType::json_int64;
+    auto is_unsigned = false;
+    auto has_suffix = false;
+    auto start = pos;
+    auto scan = &text[start];
+    auto is_negative = scan[0] == '-';
+    auto is_zero = scan[is_negative] == '0';
+
+    scan += is_negative + is_zero;
+
+    if (!is_zero) {
+        const size_t ofs = static_cast<size_t>(scan - text.data());
+        scan = scanner::scan_digits(text, ofs);
+    }
+    if (!scan) throw unexpected_end_of_text_error{ "number" };
+    if (!(static_cast<unsigned char>(scan[-1] - '0') <= 9))
+        throw unexpected_symbol_error{ string_view_t{ &scan[-1], 1u }, size_t((scan - &text[start]) - 1u) };
+    // scan decimal point
+    if (*scan == '.' && (static_cast<unsigned char>(scan[1] - '0') <= 9)) {
+        // scan fractional part
+        ++scan;
+        const size_t ofs = static_cast<size_t>(scan - text.data());
+        scan = scanner::scan_digits(text, ofs);
+        if (!scan)
+            throw unexpected_end_of_text_error{ "number" };
+        type = NumberType::json_double; // double by default
+    }
+    else if (*scan == 'i' || *scan == 'I') {
+        // scan unsigned flag
+        ++scan;
+        has_suffix  = true;
+        is_unsigned = false;
+    }
+    else if (*scan == 'u' || *scan == 'U') {
+        // scan unsigned flag
+        ++scan;
+        has_suffix  = true;
+        is_unsigned = true;
+    }
+    // scan exponent
+    if (!has_suffix && (*scan == 'e' || *scan == 'E')) {
+        ++scan;
+        // scan exponent sign
+        if (*scan == '-' || *scan == '+') ++scan;
+        // scan exponent digits
+        while ((static_cast<unsigned char>(*scan - '0') <= 9))
+            ++scan;
+        if (!(static_cast<unsigned char>(scan[-1] - '0') <= 9))
+            throw unexpected_symbol_error{ string_view_t{ &scan[-1], 1u },  size_t((scan - &text[pos]) - 1u) };
+        type = NumberType::json_double; // double by default
+    }
+    if (type == NumberType::json_double && (*scan == 'f' || *scan == 'F')) {
+		++scan;
+		type = NumberType::cpp_float;
+    }
+    else if (has_suffix) {
+        switch(*scan) {
+        case '1':
+			++scan;
+			if (!*scan) throw unexpected_end_of_text_error{ "number" };
+			if (*scan != '6') throw unexpected_symbol_error{ string_view_t{ scan, 1u }, size_t(scan - &text[start]) };
+			++scan; type = NumberType::cpp_int16; break;
+        case '3':
+			++scan;
+			if (!*scan) throw unexpected_end_of_text_error{ "number" };
+			if (*scan != '2') throw unexpected_symbol_error{ string_view_t{ scan, 1u }, size_t(scan - &text[start]) };
+			++scan; type = NumberType::cpp_int32; break;
+        case '6':
+			++scan;
+			if (!*scan) throw unexpected_end_of_text_error{ "number" };
+			if (*scan != '4') throw unexpected_symbol_error{ string_view_t{ scan, 1u }, size_t(scan - &text[start]) };
+			++scan; type = NumberType::cpp_int64; break;
+        case '8':
+			++scan; type = NumberType::cpp_int8; break;
+        default:
+            // unnumbered suffix (i or u) defaults to cpp_int64/cpp_uint64
+            type = NumberType::cpp_int64; break;
+        }
+	    if (is_unsigned) type = static_cast<NumberType>(static_cast<int>(type) + 1);
+    }
+    auto scan_size = scan - &text[start];
+    pos += scan_size;
+
+    cppon value{ number_t{ text.substr(start, scan_size), type } };
+
+    //if (!Printer.Exact &&
+    if (!thread::exact_number_mode && opt < options::quick) // options:{full,eval}
+        convert_to_numeric(value);
+
+    return value;
+}
+
+/**
+ * @brief Accepts an array from the given text at the specified position.
+ *
+ * This function accepts an array from the given text at the specified position.
+ * An array can contain multiple values separated by commas.
+ * The function updates the `pos` to point to the next character after the accepted array.
+ *
+ * @param text The text to accept the array from.
+ * @param pos The position in the text to start accepting the array.
+ *            `pos` is updated to point to the next character after the accepted array.
+ * @param opt The options for parsing the array.
+ * @return cppon An instance of `cppon` containing the accepted array.
+ *
+ * @exception unexpected_end_of_text_error
+ *            Thrown if the end of the text is reached before finding a closing bracket for the array.
+ * @exception unexpected_symbol_error
+ *            Thrown if an unexpected symbol is encountered while parsing the array.
+ */
+inline auto accept_array(string_view_t text, size_t& pos, options opt) -> cppon {
+    ++pos;
+    skip_spaces(text, pos, "array");
+    if (text[pos] == ']') {
+        ++pos; // empty array
+        return cppon{ array_t{} };
+    }
+    array_t array;
+    if (opt != options::parse) // options:{eval,quick}
+        array.reserve(thread::array_min_reserve);
+    do {
+        skip_spaces(text, pos, "array");
+        auto value = accept_value(text, pos, opt);
+        skip_spaces(text, pos, "array");
+        if (opt != options::parse) // options:{eval,quick}
+            array.emplace_back(std::move(value));
+    } while (text[pos] == ',' && ++pos);
+    expect(text, ']', pos);
+    return cppon{ std::move(array) };
+}
+
+/**
+ * @brief Accepts an object from the given text at the specified position.
+ *
+ * This function accepts an object from the given text at the specified position.
+ * An object contains key-value pairs separated by commas.
+ * The function updates the `pos` to point to the next character after the accepted object.
+ *
+ * @param text The text to accept the object from.
+ * @param pos The position in the text to start accepting the object.
+ *            `pos` is updated to point to the next character after the accepted object.
+ * @param opt The options for parsing the object.
+ * @return cppon An instance of `cppon` containing the accepted object.
+ *
+ * @exception unexpected_end_of_text_error
+ *            Thrown if the end of the text is reached before finding a closing brace for the object.
+ * @exception unexpected_symbol_error
+ *            Thrown if an unexpected symbol is encountered while parsing the object.
+ */
+inline auto accept_object(string_view_t text, size_t& pos, options opt) -> cppon {
+     ++pos;
+    skip_spaces(text, pos, "object");
+    if (text[pos] == '}') {
+        ++pos; // empty object
+        return cppon{ object_t{} };
+    }
+    object_t object;
+    if (opt != options::parse) // options:{eval,quick}
+        object.reserve(thread::object_min_reserve);
+    do {
+        skip_spaces(text, pos, "object");
+        auto key = accept_string(text, pos, opt);
+        skip_spaces(text, pos, "object");
+        expect(text, ':', pos);
+        skip_spaces(text, pos, "object");
+        auto value = accept_value(text, pos, opt);
+        skip_spaces(text, pos, "object");
+        if (opt != options::parse) // options:{eval,quick}
+            object.emplace_back(std::get<string_view_t>(key), std::move(value));
+    } while (text[pos] == ',' && ++pos);
+    expect(text, '}', pos);
+    return cppon{ std::move(object) };
+}
+
+/**
+ * @brief Accepts a value from the given text at the specified position.
+ *
+ * This function accepts a value from the given text at the specified position.
+ * The value can be a string, number, object, array, true, false, or null.
+ * The function updates the `pos` to point to the next character after the accepted value.
+ *
+ * @param text The text to accept the value from.
+ * @param pos The position in the text to start accepting the value.
+ *            `pos` is updated to point to the next character after the accepted value.
+ * @param opt The options for parsing the value.
+ * @return cppon An instance of `cppon` containing the accepted value.
+ *
+ * @exception unexpected_end_of_text_error
+ *            Thrown if the end of the text is reached before finding a valid value.
+ * @exception unexpected_symbol_error
+ *            Thrown if an unexpected symbol is encountered while parsing the value.
+ */
+inline auto accept_value(string_view_t text, size_t& pos, options opt) -> cppon {
+    switch (text[pos]) {
+    case '"': return accept_string(text, pos, opt);
+    case '{': return accept_object(text, pos, opt);
+    case '[': return accept_array(text, pos, opt);
+    case 'n': return accept_null(text, pos);
+    case 't': return accept_true(text, pos);
+    case 'f': return accept_false(text, pos);
+    case '-': case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
+        return accept_number(text, pos, opt);
+    default:
+        throw unexpected_symbol_error{ text.substr(pos, 1), pos };
+    }
+}
+
+/**
+ * @brief Evaluates a JSON text and returns the corresponding cppon structure.
+ *
+ * This function evaluates a JSON text and returns the corresponding cppon structure.
+ * The JSON text is passed as a string view, and the options parameter allows for different
+ * evaluation modes: Eval (full evaluation), Quick (text evaluation without conversion), and
+ * Parse (parse only for validation).
+ *
+ * @param text The JSON text to evaluate.
+ * @param opt The options for evaluating the JSON text. Default is Eval.
+ * @return cppon The cppon structure representing the evaluated JSON text.
+ */
+inline auto eval(string_view_t text, options opt = Eval) -> cppon {
+    if (text.empty())
+        return cppon{ nullptr };
+
+    if (text.size() >= 4 &&
+        ((static_cast<unsigned char>(text[0]) == 0x00 && static_cast<unsigned char>(text[1]) == 0x00 &&
+          static_cast<unsigned char>(text[2]) == 0xFE && static_cast<unsigned char>(text[3]) == 0xFF) ||
+         (static_cast<unsigned char>(text[0]) == 0xFF && static_cast<unsigned char>(text[1]) == 0xFE &&
+          static_cast<unsigned char>(text[2]) == 0x00 && static_cast<unsigned char>(text[3]) == 0x00))) {
+        // UTF-32 BOM (not supported)
+        throw unexpected_utf32_BOM_error{};
+    }
+    if (text.size() >= 2 &&
+        // UTF-16 BOM (not supported)
+        ((static_cast<unsigned char>(text[0]) == 0xFE && static_cast<unsigned char>(text[1]) == 0xFF) ||
+         (static_cast<unsigned char>(text[0]) == 0xFF && static_cast<unsigned char>(text[1]) == 0xFE))) {
+        throw unexpected_utf16_BOM_error{};
+    }
+    if ((static_cast<unsigned char>(text[0]) & 0xF8) == 0xF8) {
+        // 5 or 6 byte sequence, not valid in UTF-8
+        throw invalid_utf8_sequence_error{};
+    }
+    if ((static_cast<unsigned char>(text[0]) & 0xC0) == 0x80) {
+        // continuation byte, not valid as first byte
+        throw invalid_utf8_continuation_error{};
+    }
+
+    // At this point, only valid UTF-8 sequences remain:
+    //   - ASCII bytes     (0xxxxxxx)       : (text[0] & 0x80) == 0x00
+    //   - 2-byte sequence (110xxxxx)       : (text[0] & 0xE0) == 0xC0
+    //   - 3-byte sequence (1110xxxx)       : (text[0] & 0xF0) == 0xE0
+    //   - 4-byte sequence (11110xxx)       : (text[0] & 0xF8) == 0xF0
+
+    // accept UTF-8 BOM
+    if (text.size() >= 3 &&
+        static_cast<unsigned char>(text[0]) == 0xEF &&
+        static_cast<unsigned char>(text[1]) == 0xBB &&
+        static_cast<unsigned char>(text[2]) == 0xBF) {
+        text.remove_prefix(3);
+    }
+
+    size_t pos{};
+    skip_spaces(text, pos, "eval");
+
+    // accept any value, not object only
+    return accept_value(text, pos, opt);
+}
+template<size_t N>
+inline auto eval(const char (&text)[N], options opt = Eval) -> cppon {
+	return eval(string_view_t{ text, N ? N - 1 : 0 }, opt);
+}
+
+}//namespace parser
+
+using parser::eval;
+
+}//namespace ch5
+
+#endif // CPPON_PARSER_H
+
+/*
+ * C++ON - High performance C++17 JSON parser with extended features
+ * https://github.com/methanium/cppon
+ *
  * File: c++on-printer.h : JSON generation and formatting capabilities
  *
  * MIT License
@@ -5213,46 +4636,49 @@ using details::restore_paths;
 #define CPPON_PRINTER_H
 
 namespace ch5 {
+cppon printer_state::state::to_cppon() const {
+	cppon Options;
+	auto& buffer = Options["buffer"];
+	auto& layout = Options["layout"];
+
+	buffer["retain"] = RetainBuffer;
+	buffer["reserve"] = Reserve;
+
+	layout["exact"] = Exact;
+	layout["json"] = Compatible;
+	layout["flatten"] = Flatten;
+	layout["compact"] = !Pretty;
+
+	if (Pretty) layout["pretty"] = AltLayout;
+	if (Margin != 0) layout["margin"] = Margin;
+	if (Tabs != 2) layout["tabulation"] = Tabs;
+	if (!Pretty) layout["compact"] = true;
+	if (Compacted.empty()) layout["compact"] = !Pretty;
+	else {
+		size_t index = 0;
+		auto& compact = layout["compact"];
+		for (auto& Label : Compacted)
+			compact[index++] = Label;
+	}
+	return Options;
+}
+
 namespace details {
 
 // These limits represent the largest integers that can be precisely represented
 // in IEEE-754 double-precision floating point, which is what JSON uses for numbers
 constexpr int64_t json_min_limit = -9007199254740991;
 constexpr int64_t json_max_limit = 9007199254740991;
-constexpr size_t printer_reserve_per_element = CPPON_PRINTER_RESERVE_PER_ELEMENT;
-constexpr string_view_t path_prefix = CPPON_PATH_PREFIX;
-constexpr string_view_t blob_prefix = CPPON_BLOB_PREFIX;
 typedef std::unordered_set<std::string_view> string_set_t;
 
 struct printer;
-struct printer_state {
-	std::string Out;              /**< The output string that stores the printed JSON representation. */
-	string_set_t Compacted;       /**< The set of labels for compacted objects. */
-	int Level{ 0 };               /**< The current indentation level. */
-	int Tabs{ 2 };                /**< The number of spaces per indentation level. */
-	int Margin{ 0 };              /**< The margin of the printed JSON representation. */
-	bool Reserve{ true };         /**< Flag indicating whether to reserve memory for printing the JSON representation. */
-	bool Flatten{ false };        /**< Flag indicating whether to expand all objects. */
-	bool Pretty{ false };         /**< Flag indicating whether to print the JSON representation in a pretty format. */
-	bool AltLayout{ false };      /**< Flag indicating whether to print the JSON representation in an alternative layout. */
-	bool Compatible{ false };     /**< Flag indicating whether to print the JSON representation in a compatible format. */
-	bool RetainBuffer{ false };   /**< Flag indicating whether to retain the buffer between printing sessions. */
-	void swap(printer& Printer) noexcept;
-	cppon to_cppon() const;
-};
-
-inline static auto& get_printer_state() {
-	static thread_local printer_state State;
-	return State;
-	}
-
 inline auto apply_options(const cppon& Options) {
-
 	string_set_t CompactedList{};
 	int Alternative = -1;
 	int Compacted = -1;
 	int Compacting = -1;
 	int Compatible = -1;
+	int Exact = -1;
 	int Flattening = -1;
 	int Reserving = -1;
 	int Reseting = -1;
@@ -5272,7 +4698,7 @@ inline auto apply_options(const cppon& Options) {
 				return; // no buffer option specified
 			else if constexpr (std::is_same_v<type, object_t>) {
 				for (auto& [Name, Value] : Opt) {
-					auto Label{ Name };
+					const auto& Label{ Name };
 					std::visit([&](auto&& Val) {
 						using type = std::decay_t<decltype(Val)>;
 						if constexpr (std::is_same_v<type, boolean_t>) {
@@ -5375,7 +4801,7 @@ inline auto apply_options(const cppon& Options) {
 				return; // no layout option specified
 			else if constexpr (std::is_same_v<type, object_t>) {
 				for (auto& [Name, Value] : Opt) {
-					auto Label{ Name };
+					const auto& Label{ Name };
 					if (Label == "compact") {
 						visit_compact(Value);
 					}
@@ -5386,6 +4812,7 @@ inline auto apply_options(const cppon& Options) {
 								if (Label == "flatten") Flattening = Val;
 								else if (Label == "json") Compatible = Val;
 								else if (Label == "cppon") Compatible = !Val;
+								else if (Label == "exact") Exact = Val;
 								else if (Label == "pretty") Alternative = Val;
 								else throw bad_option_error("layout: invalid option");
 							}
@@ -5403,6 +4830,7 @@ inline auto apply_options(const cppon& Options) {
 				if (Opt == "flatten") Flattening = true;
 				else if (Opt == "json") Compatible = true;
 				else if (Opt == "cppon") Compatible = false;
+				else if (Opt == "exact") Exact = true;
 				else throw bad_option_error("layout: invalid option");
 			}
 			else throw bad_option_error("layout: type mismatch");
@@ -5417,7 +4845,7 @@ inline auto apply_options(const cppon& Options) {
 	visit_tabulation(Options["tabulation"]);
 
 	return std::make_tuple(CompactedList, Alternative, Compacted, Compacting,
-		Compatible, Flattening, Reserving, Reseting,
+		Compatible, Exact, Flattening, Reserving, Reseting,
 		Retaining, Margin, Tabulation);
 }
 inline void write_options(printer& Printer, const cppon& Options);
@@ -5425,21 +4853,25 @@ inline void write_options(printer& Printer, const cppon& Options);
 /**
  * @brief The printer struct is responsible for printing the JSON representation of cppon objects.
  */
-struct printer
+struct printer : public printer_state::state
 {
 	reference_vector_t* Refs{};   /**< The object map that stores the references to objects. */
 	string_view_t Compacting;          /**< The compacting string that stores the current compacting object. */
-	string_set_t Compacted;       /**< The set of labels for compacted objects. */
-	std::string Out;              /**< The output string that stores the printed JSON representation. */
-	int Level{ 0 };               /**< The current indentation level. */
-	int Tabs{ 2 };                /**< The number of spaces per indentation level. */
-	int Margin{ 0 };              /**< The margin of the printed JSON representation. */
-	bool Reserve{ true };         /**< Flag indicating whether to reserve memory for printing the JSON representation. */
-	bool Flatten{ false };        /**< Flag indicating whether to expand all objects. */
-	bool Pretty{ false };         /**< Flag indicating whether to print the JSON representation in a pretty format. */
-	bool AltLayout{ false };	  /**< Flag indicating whether to print the JSON representation in an alternative layout. */
-	bool Compatible{ false };     /**< Flag indicating whether to print the JSON representation in a compatible format. */
-	bool RetainBuffer{ false };   /**< Flag indicating whether to retain the buffer between printing sessions. */
+
+	void swap(printer_state::state& State) noexcept {
+		std::swap(State.Out, Out);
+		std::swap(State.Compacted, Compacted);
+		std::swap(State.Level, Level);
+		std::swap(State.Tabs, Tabs);
+		std::swap(State.Margin, Margin);
+		std::swap(State.Reserve, Reserve);
+		std::swap(State.Flatten, Flatten);
+		std::swap(State.Pretty, Pretty);
+		std::swap(State.AltLayout, AltLayout);
+		std::swap(State.Compatible, Compatible);
+		std::swap(State.Exact, Exact);
+		std::swap(State.RetainBuffer, RetainBuffer);
+	}
 
 	void configure(const cppon& Options, reference_vector_t* References = nullptr) {
 		Refs = References;
@@ -5460,7 +4892,7 @@ struct printer
 	 */
 	void preallocate(size_t ElementCount) {
 		if (Reserve) {
-			Out.reserve(Out.size() + printer_reserve_per_element * ElementCount + 2);
+			Out.reserve(Out.size() + thread::printer_reserve_per_element * ElementCount + 2);
 			}
 		}
 
@@ -5534,7 +4966,7 @@ struct printer
 	 */
 	void reset_margin() {
 		if (Pretty) {
-			Out.append(Level * Tabs, ' ');
+			Out.append(size_t(Level * Tabs), ' ');
 			}
 		}
 
@@ -5618,10 +5050,10 @@ struct printer
 		if (Pretty) {
 			if (Compacting.empty()) {
 				if (Reserve) {
-					Out.reserve(Out.size() + Level * Tabs + 1);
+					Out.reserve(Out.size() + size_t(Level * Tabs + 1));
 					}
 				Out.push_back('\n');
-				Out.append(Level * Tabs, ' ');
+				Out.append(size_t(Level * Tabs), ' ');
 				}
 			else {
 				Out.push_back(' ');
@@ -5661,42 +5093,6 @@ struct printer
 		}
 };
 
-inline void printer_state::swap(printer& Printer) noexcept {
-	std::swap(Printer.Out, Out);
-	std::swap(Printer.Compacted, Compacted);
-	std::swap(Printer.Level, Level);
-	std::swap(Printer.Tabs, Tabs);
-	std::swap(Printer.Margin, Margin);
-	std::swap(Printer.Reserve, Reserve);
-	std::swap(Printer.Flatten, Flatten);
-	std::swap(Printer.Pretty, Pretty);
-	std::swap(Printer.AltLayout, AltLayout);
-	std::swap(Printer.Compatible, Compatible);
-	std::swap(Printer.RetainBuffer, RetainBuffer);
-}
-inline cppon printer_state::to_cppon() const {
-	cppon Options;
-	auto& buffer = Options["buffer"];
-	buffer["retain"] = RetainBuffer;
-	buffer["reserve"] = Reserve;
-
-	auto& layout = Options["layout"];
-	layout["json"] = Compatible;
-	layout["flatten"] = Flatten;
-	layout["compact"] = !Pretty;
-	if (Pretty) layout["pretty"] = AltLayout;
-	if (Margin != 0) layout["margin"] = Margin;
-	if (Tabs != 2) layout["tabulation"] = Tabs;
-	if (!Pretty) layout["compact"] = true;
-	if (Compacted.empty()) layout["compact"] = !Pretty;
-	else {
-		size_t index = 0;
-		auto& compact = layout["compact"];
-		for (auto& Label : Compacted)
-			compact[index++] = Label;
-	}
-	return Options;
-}
 
 inline void write_options(printer& Printer, const cppon& Options) {
 	details::string_set_t CompactedList{};
@@ -5704,6 +5100,7 @@ inline void write_options(printer& Printer, const cppon& Options) {
 	int Compacted = -1;
 	int Compacting = -1;
 	int Compatible = -1;
+	int Exact = -1;
 	int Flattening = -1;
 	int Reserving = -1;
 	int Reseting = -1;
@@ -5713,7 +5110,7 @@ inline void write_options(printer& Printer, const cppon& Options) {
 	auto ResetPrinter = false;
 	if (!Options.is_null()) {
 		std::tie(CompactedList, Alternative, Compacted, Compacting,
-			Compatible, Flattening, Reserving, Reseting,
+			Compatible, Exact, Flattening, Reserving, Reseting,
 			Retaining, Margin, Tabulation) = details::apply_options(Options);
 	}
 
@@ -5779,6 +5176,13 @@ inline void write_options(printer& Printer, const cppon& Options) {
 	if (Compatible != -1) {
 		Printer.Compatible = static_cast<bool>(Compatible);
 	}
+	// compatibility
+	if (Exact != -1) {
+		Printer.Exact = static_cast<bool>(Exact);
+	}
+	else {
+		Printer.Exact = static_cast<bool>(thread::exact_number_mode);
+	}
 
 	// reference flattening
 	if (Flattening != -1) {
@@ -5793,12 +5197,12 @@ inline void write_options(printer& Printer, const cppon& Options) {
 }
 
 inline cppon configure_printer(const cppon& Options, bool get_previous = false) {
-	auto& state = get_printer_state();
+	auto& state = thread::get_printer_state();
 	cppon previous = get_previous ? state.to_cppon() : cppon{};
 	printer Printer;
-	state.swap(Printer);
+	Printer.swap(state);
 	Printer.configure(Options);
-	state.swap(Printer);
+	Printer.swap(state);
 	return previous;
 }
 
@@ -5821,7 +5225,7 @@ inline cppon configure_printer(string_view_t OptionsJson, bool get_previous = fa
  * @param Num The floating-point value to print
  * @param isDouble Whether the value is a double (true) or float (false)
  */
-inline void print_floats(printer& Printer, char* Buffer, size_t BufferSize, const double_t Num, bool isDouble) {
+inline size_t print_floats(printer& Printer, char* Buffer, size_t BufferSize, const double_t Num, bool isDouble) {
 	auto Len = snprintf(Buffer, BufferSize, isDouble ? "%.16lg" : "%.7g", Num);
 	char* Dot = strchr(Buffer, '.');
 	char* Exp = strpbrk(Buffer, "eE");
@@ -5838,9 +5242,9 @@ inline void print_floats(printer& Printer, char* Buffer, size_t BufferSize, cons
 		Buffer[Len++] = '.';
 		Buffer[Len++] = '0';
 		}
-	if (!(Printer.Compatible | isDouble)) Buffer[Len++] = 'f';
+	if (!(Printer.Compatible || isDouble)) Buffer[Len++] = 'f';
 	Buffer[Len] = '\0';
-	Printer.print(Buffer, static_cast<size_t>(Len));
+	return Len;
 	}
 
 /**
@@ -5853,14 +5257,12 @@ class printer_guard {
 	printer saved_printer;
 public:
 	printer_guard(const cppon& Options) {
-		auto& state = get_printer_state();
-		state.swap(saved_printer);
+		saved_printer.swap(thread::get_printer_state());
 		configure_printer(Options);
 	}
 
 	~printer_guard() {
-		auto& state = get_printer_state();
-		state.swap(saved_printer);
+		saved_printer.swap(thread::get_printer_state());
 	}
 };
 
@@ -5920,66 +5322,126 @@ inline void print(printer& Printer, const boolean_t Bool) {
 	}
 inline void print(printer& Printer, const float_t Num) {
 	char Buffer[24];
-	details::print_floats(Printer, Buffer, sizeof(Buffer), static_cast<const double_t>(Num), false);
+	size_t Len = details::print_floats(Printer, Buffer, sizeof(Buffer), static_cast<const double_t>(Num), false);
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::string_view{ Buffer, Len }, NumberType::cpp_float } });
+		return;
+		}
+	Printer.print(Buffer, Len);
 	}
 inline void print(printer& Printer, const double_t Num) {
 	char Buffer[48];
-	details::print_floats(Printer, Buffer, sizeof(Buffer), static_cast<const double_t>(Num), true);
+	size_t Len = details::print_floats(Printer, Buffer, sizeof(Buffer), static_cast<const double_t>(Num), true);
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::string_view{ Buffer, Len }, NumberType::json_double } });
+		return;
+		}
+	Printer.print(Buffer, Len);
 	}
 inline void print(printer& Printer, const int8_t Num) {
-    Printer.print(std::to_string(static_cast<int>(Num)));
-    if (!Printer.Compatible) Printer.print("i8");
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<int>(Num)), NumberType::cpp_int8 } });
+		return;
+		}
+	Printer.print(std::to_string(static_cast<int>(Num)));
+	if (!Printer.Compatible) Printer.print("i8");
 	}
 inline void print(printer& Printer, const uint8_t Num) {
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<unsigned int>(Num)), NumberType::cpp_uint8 } });
+		return;
+		}
     Printer.print(std::to_string(static_cast<unsigned int>(Num)));
     if (!Printer.Compatible) Printer.print("u8");
 	}
 inline void print(printer& Printer, const int16_t Num) {
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<int>(Num)), NumberType::cpp_int16 } });
+		return;
+		}
     Printer.print(std::to_string(static_cast<int>(Num)));
     if (!Printer.Compatible) Printer.print("i16");
 	}
 inline void print(printer& Printer, const uint16_t Num) {
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<unsigned int>(Num)), NumberType::cpp_uint16 } });
+		return;
+		}
     Printer.print(std::to_string(static_cast<unsigned int>(Num)));
     if (!Printer.Compatible) Printer.print("u16");
 	}
 inline void print(printer& Printer, const int32_t Num) {
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<int>(Num)), NumberType::cpp_int32 } });
+		return;
+		}
     Printer.print(std::to_string(static_cast<int>(Num)));
     if (!Printer.Compatible) Printer.print("i32");
 	}
 inline void print(printer& Printer, const uint32_t Num) {
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<unsigned int>(Num)), NumberType::cpp_uint32 } });
+		return;
+		}
     Printer.print(std::to_string(static_cast<unsigned int>(Num)));
     if (!Printer.Compatible) Printer.print("u32");
 	}
 inline void print(printer& Printer, const int64_t Num) {
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<long long>(Num)), NumberType::cpp_int64 } });
+		return;
+		}
 	if (Printer.Compatible && (Num < details::json_min_limit || Num > details::json_max_limit)) {
 		throw json_compatibility_error("Value out of range for JSON.");
 		}
 	Printer.print(std::to_string(static_cast<long long>(Num)));
 	}
 inline void print(printer& Printer, const uint64_t Num) {
-	if (Printer.Compatible) {
-		if(Num > details::json_max_limit) {
-			throw json_compatibility_error("Value out of range for JSON.");
-			}
-		Printer.print(std::to_string(static_cast<unsigned long long>(Num)));
+	if (Printer.Exact) {
+		print(Printer, cppon{ number_t{ std::to_string(static_cast<long long>(Num)), NumberType::cpp_uint64 } });
+		return;
 		}
-	else {
-		Printer.print(std::to_string(static_cast<unsigned long long>(Num)));
-		Printer.print('u');
+	if (Printer.Compatible && Num > details::json_max_limit) {
+		throw json_compatibility_error("Value out of range for JSON.");
 		}
+	Printer.print(std::to_string(static_cast<unsigned long long>(Num)));
+	if (!Printer.Compatible) Printer.print('u');
 	}
 inline void print(printer& Printer, const number_t TextualNumber) {
-	Printer.print(TextualNumber);
+	if (Printer.Compatible || Printer.Exact) {
+		std::array<string_view_t, 11> types{
+			"int64", "double", "float", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64"
+			};
+		if (Printer.Compatible)
+			switch (TextualNumber.type) {
+				case NumberType::json_int64:
+				case NumberType::json_double:
+					Printer.print(TextualNumber);
+					return;
+				default:
+					break; // fall through
+				}
+		Printer.print('"');
+		Printer.print(thread::number_prefix);
+		Printer.print(types[static_cast<size_t>(TextualNumber.type)]);
+		Printer.print('(');
+		Printer.print(TextualNumber);
+		Printer.print(')');
+		Printer.print('"');
+		}
+	else {
+		Printer.print(TextualNumber);
+		}
 	}
 inline void print(printer& Printer, const path_t& Path) {
 	Printer.print('"');
-    Printer.print(details::path_prefix);
+    Printer.print(thread::path_prefix);
     Printer.print(Path);
 	Printer.print('"');
 	}
 inline void print(printer& Printer, const blob_string_t& Blob) {
 	Printer.print('"');
-    Printer.print(details::blob_prefix);
+    Printer.print(thread::blob_prefix);
     Printer.print(Blob);
 	Printer.print('"');
 	}
@@ -5994,7 +5456,7 @@ inline void print(printer& Printer, const array_t& Array) {
 
 	// preallocate storage
 	size_t StructureSize = 2; // '[' and ']'
-	size_t ReservePerElement = details::printer_reserve_per_element; // guess
+	size_t ReservePerElement = thread::printer_reserve_per_element; // guess
 	size_t StartSize = Printer.printed_count();
 	size_t ElementCount = Array.size();
 	size_t CurrentElementCount = 0;
@@ -6028,7 +5490,7 @@ inline void print(printer& Printer, const object_t& Object) {
 
 	// preallocate storage
 	size_t StructureSize = 2; // '{' and '}' or '"' and '"'
-	size_t ReservePerElement = details::printer_reserve_per_element; // guess
+	size_t ReservePerElement = thread::printer_reserve_per_element; // guess
 	size_t StartSize = Printer.printed_count();
 	size_t ElementCount = Object.size();
 	size_t CurrentElementCount = 0;
@@ -6071,7 +5533,7 @@ inline void print(printer& Printer, const pointer_t& Pointer) {
 		if (Printer.Refs)
 			print(Printer, path_t{ get_object_path(*Printer.Refs, Pointer) });
 		else
-			print(Printer, path_t{ find_object_path(visitors::get_root(), Pointer) });
+			print(Printer, path_t{ find_object_path(roots::get_root(), Pointer) });
 		}
 	else {
 		print(Printer, *Pointer);
@@ -6090,27 +5552,27 @@ inline auto operator<<(printer& Printer, const cppon& Value) -> printer& {
 	return Printer;
 }
 inline auto operator<<(std::ostream& Stream, const cppon& Value) -> std::ostream& {
-	auto& State = details::get_printer_state();
+	auto& State = thread::get_printer_state();
 	printer Printer;
-	State.swap(Printer);
+	Printer.swap(State);
 	print(Printer, Value);
-	State.swap(Printer);
 	Stream.write(Printer.Out.data(), static_cast<std::streamsize>(Printer.Out.size()));
+	Printer.swap(State);
     return Stream;
 }
 
 inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, const cppon& Options) -> std::string_view {
-	auto& State = details::get_printer_state();
+	auto& State = thread::get_printer_state();
 	printer Printer;
 
 	// swap printer state
-	State.swap(Printer);
+	Printer.swap(State);
 
 	Printer.configure(Options, Refs);
 	print(Printer, Object);
 
 	// swap back printer state
-	State.swap(Printer);
+	Printer.swap(State);
 
 	// return the printed JSON representation
 	return std::string_view{ State.Out };
@@ -6148,7 +5610,7 @@ inline auto to_string(const cppon& Object, string_view_t Options = {}) {
  * C++ON - High performance C++17 JSON parser with extended features
  * https://github.com/methanium/cppon
  *
- * File: c++on-document.h : CPPON document wrapper
+ * File: c++on-literals.h : C++ON
  *
  * MIT License
  * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
@@ -6156,6 +5618,886 @@ inline auto to_string(const cppon& Object, string_view_t Options = {}) {
  * See LICENSE file for complete license details
  */
 
+#ifndef CPPON_ROOTS_H
+#define CPPON_ROOTS_H
+
+namespace ch5 {
+
+inline cppon& null() noexcept {
+	CPPON_ASSERT(thread::null.is_null());
+	return thread::null;
+}
+
+namespace roots {
+
+/**
+ * @brief Central utilities for managing cppon objects and their interconnections.
+ *
+ * This suite of utility functions is foundational to the cppon framework. It manages a per-thread root
+ * context via a stack, exposes a per-thread null sentinel, and supports dereferencing of path- and pointer-
+ * based references consistently across traversals.
+ *
+ * Sentinel and invariants:
+ * - The root stack is constructed with a bottom sentinel (nullptr) to avoid repeated stack.empty() checks.
+ *   This sentinel is never dereferenced. Access to the current root goes through get_root(), which asserts
+ *   that the top entry is non-null.
+ * - Uniqueness: each pushed root must be unique within the stack (no duplicates). In Debug, push_root() asserts this.
+ * - LIFO discipline: pop_root() only pops if the given object is at the top; otherwise it is a no-op (harmless temporaries).
+ *
+ * - `null()`: Provides a per-thread singleton instance representing a null value, ensuring consistent
+ *   representation of null or undefined states across the cppon object hierarchy.
+ *
+ * - Root stack and accessors:
+ *   - `root_stack()`: Access to the thread-local stack that holds `cppon*` roots.
+ *   - `get_root()`: Returns a reference to the current root. Asserts the stack is never empty and the
+ *     top is never nullptr (thus the sentinel is never accessed).
+ *   - `push_root(const cppon&)` and `pop_root(const cppon&)`: Push the given object if not already on top,
+ *     and pop it only if it is the current top, respectively. Guarantees balanced stack usage in scoped code.
+ *
+ * - Absolute paths and guards:
+ *   - Absolute-path access (string indices starting with '/') uses `push_root(*this)` and resolves the
+ *     remainder of the path against `get_root()`.
+ *   - `root_guard` is the RAII helper to scope a root change safely (push on construction, pop on destruction).
+ *
+ * @note `deref_if_ptr` resolves `pointer_t` directly and `path_t` against the current root. Assertions enforce
+ *       that `get_root()` is only used when the top is non-null.
+ *
+ * Collectively, these utilities underscore the cppon framework's flexibility, robustness, and capability to represent
+ * and manage complex data structures and relationships. They are instrumental in ensuring that cppon objects can be
+ * dynamically linked, accessed, and manipulated within a coherent and stable framework.
+ */
+
+// Notes:
+// - The stack is initialized with a bottom sentinel (nullptr). This avoids empty() checks.
+// - The sentinel is never dereferenced because get_root() asserts top != nullptr.
+
+inline std::vector<cppon*>& root_stack() noexcept {
+	return thread::stack;
+}
+inline cppon& get_root() noexcept {
+	CPPON_ASSERT(!root_stack().empty() && root_stack().back() != nullptr &&
+		"Root stack shall never be empty and stack top shall never be nullptr");
+	return *root_stack().back();
+}
+// Promote the entry to top if found; returns true if present (already top or promoted)
+inline bool hoist_if_found(std::vector<cppon*>& s, const cppon* p) noexcept {
+	if (s.back() == p) return true;
+	auto found = std::find(s.rbegin(), s.rend(), p);
+	if (found == s.rend()) return false;
+	std::swap(*found, s.back());
+	return true;
+}
+inline void pop_root(const cppon& root) noexcept {
+	auto& stack = root_stack();
+	if (hoist_if_found(stack, &root))
+		stack.pop_back();
+}
+inline void push_root(const cppon& root) {
+	auto& stack = root_stack();
+	if (!hoist_if_found(stack, &root))
+		stack.push_back(&const_cast<cppon&>(root));
+}
+
+} // namespace roots
+} // namespace ch5
+
+
+#endif // CPPON_ROOTS_H
+
+/*
+ * C++ON - High performance C++17 JSON parser with extended features
+ * https://github.com/methanium/cppon
+ *
+ * File: c++on-visitors.h : Object traversal and manipulation utilities
+ *
+ * MIT License
+ * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
+ *
+ * See LICENSE file for complete license details
+ */
+
+#ifndef CPPON_VISITORS_H
+#define CPPON_VISITORS_H
+
+namespace ch5 {
+namespace visitors {
+
+constexpr size_t max_array_delta = CPPON_MAX_ARRAY_DELTA;
+constexpr size_t object_min_reserve = CPPON_OBJECT_MIN_RESERVE;
+constexpr size_t array_min_reserve = CPPON_ARRAY_MIN_RESERVE;
+
+struct key_t {
+	std::string_view value;
+	explicit key_t(std::string_view v) : value(v) {}
+	operator std::string_view() const { return value; }
+};
+
+/**
+ * @brief Central utilities for managing cppon objects and their interconnections.
+ *
+ * This suite of utility functions is foundational to the cppon framework. It manages a per-thread root
+ * context via a stack, exposes a per-thread null sentinel, and supports dereferencing of path- and pointer-
+ * based references consistently across traversals.
+ *
+ * This module provides:
+ * - A thread_local static_storage that holds:
+ *   - a std::vector<cppon*> root stack (used with stack semantics),
+ *   - a singleton cppon Null used as a null sentinel.
+ *
+ * Sentinel and invariants:
+ * - The root stack is constructed with a bottom sentinel (nullptr) to avoid repeated stack.empty() checks.
+ *   This sentinel is never dereferenced. Access to the current root goes through get_root(), which asserts
+ *   that the top entry is non-null.
+ * - Uniqueness: each pushed root must be unique within the stack (no duplicates). In Debug, push_root() asserts this.
+ * - LIFO discipline: pop_root() only pops if the given object is at the top; otherwise it is a no-op (harmless temporaries).
+ *
+ * - `null()`: Provides a per-thread singleton instance representing a null value, ensuring consistent
+ *   representation of null or undefined states across the cppon object hierarchy.
+ *
+ * - Root stack and accessors:
+ *   - `root_stack()`: Access to the thread-local stack that holds `cppon*` roots.
+ *   - `get_root()`: Returns a reference to the current root. Asserts the stack is never empty and the
+ *     top is never nullptr (thus the sentinel is never accessed).
+ *   - `push_root(const cppon&)` and `pop_root(const cppon&)`: Push the given object if not already on top,
+ *     and pop it only if it is the current top, respectively. Guarantees balanced stack usage in scoped code.
+ *
+ * - Absolute paths and guards:
+ *   - Absolute-path access (string indices starting with '/') uses `push_root(*this)` and resolves the
+ *     remainder of the path against `get_root()`.
+ *   - `root_guard` is the RAII helper to scope a root change safely (push on construction, pop on destruction).
+ *
+ * @note `deref_if_ptr` resolves `pointer_t` directly and `path_t` against the current root. Assertions enforce
+ *       that `get_root()` is only used when the top is non-null.
+ *
+ * Collectively, these utilities underscore the cppon framework's flexibility, robustness, and capability to represent
+ * and manage complex data structures and relationships. They are instrumental in ensuring that cppon objects can be
+ * dynamically linked, accessed, and manipulated within a coherent and stable framework.
+ */
+
+// Return true if every character is '0'..'9' (empty => false for path segments)
+inline bool all_digits(string_view_t sv) noexcept {
+	if (sv.empty()) return false;
+	return std::all_of(sv.begin(), sv.end(), [](unsigned char c) {
+		unsigned d = static_cast<unsigned>(c) - static_cast<unsigned>('0');
+		return d <= 9u;
+	});
+}
+
+// Bounded helper to convert a numeric string_view into size_t
+inline size_t parse_index(string_view_t sv) noexcept {
+	size_t idx = 0;
+	for (char c : sv) {
+		idx = idx * 10 + static_cast<size_t>(c - '0');
+	}
+	return idx;
+}
+
+/**
+ * @brief Internal dereference helpers for pointer_t and path_t.
+ *
+ * deref_if_ptr:
+ * - pointer_t: returns *arg (or the thread-local null sentinel if the pointer is null).
+ * - path_t: resolves against the current root (get_root()); the leading '/' is removed unconditionally.
+ * - other alternatives: returns the original object reference.
+ *
+ * deref_if_not_null (non-const only):
+ * - If the slot holds a null pointer_t, returns the slot itself (enables autovivification at the slot).
+ * - Otherwise delegates to deref_if_ptr.
+ *
+ * Notes
+ * - These helpers are internal (namespace ch5::visitors). Public traversal uses visitor(...) and cppon::operator[].
+ * - On path_t resolution, visitor(...) may throw: member_not_found_error, type_mismatch_error, null_value_error, etc.
+ */
+inline auto deref_if_ptr(const cppon& obj) -> const cppon& {
+	return std::visit([&](auto&& arg) -> const cppon& {
+		using type = std::decay_t<decltype(arg)>;
+		if constexpr (std::is_same_v<type, pointer_t>)
+			return arg ? *arg : null();
+		if constexpr (std::is_same_v<type, path_t>) {
+			string_view_t tmp = arg.value;
+			tmp.remove_prefix(1);
+			return visitor(static_cast<const cppon&>(roots::get_root()), tmp);
+		}
+		return obj;
+	}, static_cast<const value_t&>(obj));
+}
+inline auto deref_if_ptr(cppon& obj) -> cppon& {
+	return std::visit([&](auto&& arg) -> cppon& {
+		using type = std::decay_t<decltype(arg)>;
+		if constexpr (std::is_same_v<type, pointer_t>)
+			return arg ? *arg : null();
+		if constexpr (std::is_same_v<type, path_t>) {
+			string_view_t tmp = arg.value;
+			tmp.remove_prefix(1);
+			return visitor(roots::get_root(), tmp);
+		}
+		return obj;
+	}, static_cast<value_t&>(obj));
+}
+
+/**
+ * @brief Selects the write reference for a non-leaf path segment.
+ *
+ * Behavior:
+ * - If the slot currently holds a null pointer_t, returns the slot itself (autovivification at the slot).
+ * - Otherwise returns the dereferenced target via deref_if_ptr (pointer_t/path_t/value).
+ *
+ * Exceptions:
+ * - May propagate exceptions from deref_if_ptr -> visitor(get_root(), tmp) when resolving path_t
+ *   (e.g., member_not_found_error, type_mismatch_error, null_value_error, ...).
+ * - A null pointer_t path does not throw here.
+ */
+inline cppon& deref_if_not_null(cppon& slot) {
+	if (auto p = std::get_if<pointer_t>(&slot); p && !*p)
+		return slot;
+	return deref_if_ptr(slot);
+}
+
+inline cppon& vivify(cppon& slot, string_view_t key);
+
+/**
+ * @brief Visitor functions for accessing and potentially modifying members in an object using a key.
+ *
+ * These specializations of the visitor function serve a dual purpose within the cppon framework. They allow for direct access
+ * to members within an object by their name key. The non-const version additionally supports dynamically resizing the object
+ * to accommodate new members, facilitating the mutation of the object structure.
+ *
+ * The const version of the function provides read-only access to the members within a constant object, ensuring that the operation does not
+ * modify the object. It checks if the requested key is present inside the object and returns a reference to the member's value at that
+ * location. If the key is not found, a null object is returned, indicating that the value does not exist at the specified key.
+ *
+ * Exceptions:
+ * - anything that std::vector::emplace_back might throw (e.g., std::bad_alloc).
+ */
+inline auto visitor(const object_t& object, key_t key) noexcept -> const cppon& {
+	for (auto& [name, value] : object)
+		if (name == key) return value;
+	return null();
+}
+inline auto visitor(object_t& object, key_t key) -> cppon& {
+	for (auto& [name, value] : object)
+		if (name == key) return value;
+	if (object.empty()) object.reserve(object_min_reserve);
+	object.emplace_back(key, null());
+	return std::get<cppon>(object.back());
+}
+
+/**
+ * @brief Visitor functions for accessing and potentially modifying elements in an array using a numeric index.
+ *
+ * These specializations of the visitor function serve a dual purpose within the cppon framework. They allow for direct access
+ * to elements within an array by their numerical index. The non-const version additionally supports dynamically resizing the array
+ * to accommodate indices beyond the current bounds, facilitating the mutation of the array structure. This dynamic resizing is
+ * constrained by a permissible range, defined by the current size plus a max_array_delta threshold, to prevent excessive expansion.
+ *
+ * The const version of the function provides read-only access to elements within a constant array, ensuring that the operation does not
+ * modify the array. It checks if the requested index is within the bounds of the array and returns a reference to the element at that
+ * index. If the index is out of bounds, a null object is returned, indicating that the element does not exist at the specified index.
+ *
+ * Note that the non-const version is the source of `excessive_array_resize_error` if the requested index exceeds the permissible range
+ * (current size + max_array_delta).
+ *
+ * Exceptions:
+ * - excessive_array_resize_error: The requested index exceeds the permissible range (current size + max_array_delta) in the non-const version.
+ * - anything that std::vector::resize might throw (e.g., std::bad_alloc).
+ */
+inline const cppon& visitor(const array_t& array, size_t index) noexcept {
+	if (index >= array.size()) {
+		return null();
+	}
+	return array[index];
+}
+inline cppon& visitor(array_t& array, size_t index) {
+	if (index >= array.size() ) {
+		const size_t max_allowed = array.size() + max_array_delta;
+		if (index > max_allowed)
+			throw excessive_array_resize_error();
+		if (array.empty()) array.reserve(std::max(array_min_reserve, index));
+		array.resize(index + 1, null());
+	}
+	return array[index];
+}
+
+/**
+ * @brief Visitor functions for accessing and potentially modifying elements in an array using a string index.
+ *
+ * The first path segment must be a numeric index. If not, bad_array_index_error is thrown.
+ * If more segments follow, traversal recurses into the child (arrays/objects only).
+ *
+ * Exceptions:
+ * - bad_array_index_error: the immediate segment is not numeric.
+ * - null_value_error (const variant): next segment requested but current value is null.
+ * - type_mismatch_error: non-terminal segment is not array/object.
+ */
+inline auto visitor(const array_t& array, string_view_t index) -> const cppon& {
+	auto next{ index.find('/') };
+	auto digits{ index.substr(0, next) }; // digits are numbers
+	if (!all_digits(digits))
+		throw bad_array_index_error(digits);
+	auto& element = visitor(array, parse_index(digits));
+	if (next == index.npos) return element; // if there is no next segment, it's a value
+	auto& value = deref_if_ptr(element); // if there is a next segment, it's a path
+	if (value.is_null()) throw null_value_error(); // if the value is null, throw an error
+    return visitor(value, index.substr(next + 1));
+}
+inline auto visitor(array_t& array, string_view_t index) -> cppon& {
+	auto next{ index.find('/') };
+	auto digits{ index.substr(0, next) }; // digits are numbers
+	if (!all_digits(digits))
+		throw bad_array_index_error(digits);
+	auto& element = visitor(array, parse_index(digits));
+	if (next == index.npos) return element; // if there is no next segment, it's a value
+	auto& value = deref_if_not_null(element); // if there is a next segment, it's a path
+	auto newIndex{ index.substr(next + 1) };
+	auto nextKey{ newIndex.substr(0, newIndex.find('/')) };
+	CPPON_ASSERT(!nextKey.empty() && "Next key shall never be empty here");
+    return vivify(value, newIndex);
+}
+
+/**
+ * @brief Visitor functions for accessing and potentially modifying members in an object using a string key.
+ *
+ * The first path segment can be any name key.
+ * If more segments follow, traversal recurses into the child (arrays/objects only).
+ *
+ * Exceptions:
+ * - member_not_found_error (const variant): next segment requested but current value is null.
+ * - type_mismatch_error: non-terminal segment is not array/object.
+ */
+inline const cppon& visitor(const object_t& object, string_view_t index) {
+	auto next{ index.find('/') };
+	auto key = index.substr(0, next); // key is a name
+	auto& element = visitor(object, key_t{ key });
+	if (next == index.npos) return element; // if there is no next segment, it's a value
+	auto& value = deref_if_ptr(element); // if there is a next segment, it's a path
+	if (value.is_null())
+		throw member_not_found_error{}; // if the value not defined, throw an error
+	return visitor(value, index.substr(next + 1));
+}
+inline cppon& visitor(object_t& object, string_view_t index) {
+	auto next{ index.find('/') };
+	auto key = index.substr(0, next); // key is a name
+	auto& element = visitor(object,  key_t{ key });
+	if (next == index.npos) return element; // no next segment, return value reference
+	auto& value = deref_if_not_null(element); // if there is a next segment, it's a path
+	auto newIndex{ index.substr(next + 1) };
+	auto nextKey{ newIndex.substr(0, newIndex.find('/')) };
+	CPPON_ASSERT(!nextKey.empty() && "Next key shall never be empty here");
+    return vivify(value, newIndex);
+}
+
+/**
+ * @brief Visitor functions for accessing and potentially modifying elements within a cppon object by a numerical index.
+ *
+ * These functions facilitate direct access to elements within a cppon object, which is expected to be an array,
+ * using a numerical index. They are designed to handle both const and non-const contexts, allowing for read-only or
+ * modifiable access to the elements, respectively.
+ *
+ * In the non-const version, if the specified index exceeds the current size of the array, the array is automatically resized
+ * to accommodate the new element at the given index. This resizing is subject to a maximum increment limit defined by max_array_delta to prevent
+ * excessive and potentially harmful allocation. If the required increment to accommodate the new index exceeds this limit, a bad_array_index_error exception is thrown,
+ * signaling an attempt to access or create an element at an index that would require an excessively large increase in the array size.
+ *
+ * In both versions, if the cppon object is not an array (indicating a misuse of the type), a type_mismatch_error exception is
+ * thrown. This ensures that the functions are used correctly according to the structure of the cppon object and maintains type safety.
+ *
+ * The const version of these functions provides read-only access to the elements, ensuring that the operation does not modify the
+ * object being accessed. It allows for dynamic dereferencing of objects within a const context, supporting scenarios where the
+ * cppon object structure is accessed in a read-only manner.
+ *
+ * Key Points:
+ * - Direct access to elements by numerical index.
+ * - Automatic resizing of the array in the non-const version to accommodate new elements, with a safeguard increment limit (max_array_delta).
+ * - Throws excessive_array_resize_error if the required increment to reach the specified index exceeds the permissible range.
+ * - Throws type_mismatch_error if the cppon object is not an array.
+ * - Supports both const and non-const contexts, enabling flexible data manipulation and access patterns.
+ *
+ * @param object The cppon object to visit. This object must be an array for index-based access to be valid.
+ * @param index The numerical index to access the element. In the non-const version, if the index is greater than the size of the array, the array is resized according to the increment limit.
+ * @return (const) cppon& A reference to the visited element in the array. The non-const version allows for modification of the element.
+ * @throws excessive_array_resize_error If the required increment to accommodate the specified index exceeds the maximum limit allowed by max_array_delta.
+ * @throws type_mismatch_error If the cppon object is not an array, indicating a type error.
+ */
+inline const cppon& visitor(const cppon& object, size_t index) {
+    return std::visit([&](auto&& arg) -> const cppon& {
+		using type = std::decay_t<decltype(arg)>;
+		if constexpr (std::is_same_v<type, array_t>)
+			return visitor(arg, index);
+		throw type_mismatch_error{};
+    }, static_cast<const value_t&>(object));
+}
+inline cppon& visitor(cppon& object, size_t index) {
+    return std::visit([&](auto&& arg) -> cppon& {
+		using type = std::decay_t<decltype(arg)>;
+		if constexpr (std::is_same_v<type, array_t>)
+			return visitor(arg, index);
+        if constexpr (std::is_same_v<type, nullptr_t>) {
+            // autovivify the root as an object if it is null
+            object = cppon{ array_t{} };
+            auto& arr = std::get<array_t>(object);
+            arr.reserve(array_min_reserve);
+            return visitor(arr, index);
+        }
+        throw type_mismatch_error{};
+    }, static_cast<value_t&>(object));
+}
+
+/**
+ * @brief Dynamically accesses elements within a cppon object using a string index, with support for both const and non-const contexts.
+ *
+ * This function allows dynamic access to elements within a cppon object, which can be either an array or an object,
+ * using a string index. The string index can represent either a direct key in an object or a numeric index in an array.
+ *
+ * Additionally, it supports hierarchical access to nested elements by interpreting the string index as a path, where segments
+ * of the path are separated by slashes ('/'). This allows deep access to nested structures, with the non-const version
+ * allowing modification of elements.
+ *
+ * The function first determines the type of the cppon object (array or object) based on its current state. It then attempts
+ * to access the element specified by the index or path. If the element is within a nested structure, the function recursively
+ * navigates through the structure to reach the desired element. In the non-const version, any missing elements along the path
+ * are created as either objects or arrays, depending on the segment type.
+ *
+ * Exceptions:
+ * - `type_mismatch_error` is thrown if the object is not an array or an object when expected.
+ * - In the const version:
+ *   - If the key is a path, `member_not_found_error` or `type_mismatch_error` may be thrown depending on the path.
+ *   - For array segments, `bad_array_index_error` is thrown if the segment is not numeric.
+ *   - When reaching the leaf of the path in an object_t and the member does not exist, it returns the null object, avoiding exceptions for non-existent members in read-only scenarios.
+ *   - If the index is out of bounds for the array, it returns the null object.
+ * - In the non-const version:
+ *   - If the path exists and the next segment is numeric for object_t, it throws `type_mismatch_error`.
+ *   - For array segments, `bad_array_index_error` is thrown if the segment is not numeric.
+ *   - If the index is out of bounds for the array and requires excessive resizing, it throws `excessive_array_resize_error`.
+ *
+ * This ensures that the caller is informed of incorrect access attempts or structural issues within the cppon object.
+ *
+ * The const version of this function provides the same functionality but ensures that the operation does not modify the object
+ * being dereferenced. It allows dynamic dereferencing of objects in a const context, supporting scenarios where the cppon object
+ * structure is accessed in a read-only manner.
+ *
+ * @param object The cppon object to visit. This object can be an array or an object, and may contain nested structures.
+ *
+ * @param index A string representing the index or path to the element to access. This can specify direct access or hierarchical access to nested elements.
+ *              If index is empty, the function returns the object itself.
+ *
+ * @return (const) cppon& A reference to the cppon element at the specified index or path, with the non-const version allowing modification of the element.
+ *
+ * @throws type_mismatch_error If the cppon object does not match the expected structure for the specified index or path, indicating a type mismatch or invalid access attempt.
+ * @throws member_not_found_error In the specified scenarios, indicating that a specified member in the path does not exist.
+ * @throws invalid_path_segment_error In the specified scenarios, indicating that a path segment is invalid or out of bounds.
+ * @throws excessive_array_resize_error In the specified scenarios, indicating that excessive array resizing is required.
+ */
+inline const cppon& visitor(const cppon& object, string_view_t index) {
+	if (index.empty()) return object;
+    return std::visit([&](auto&& arg) -> const cppon& {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, object_t>)
+            return visitor(arg, index);
+        if constexpr (std::is_same_v<type, array_t>)
+            return visitor(arg, index);
+        throw type_mismatch_error{};
+    }, static_cast<const value_t&>(object));
+}
+inline cppon& visitor(cppon& object, string_view_t index) {
+	if (index.empty()) return object;
+    return std::visit([&](auto&& arg) -> cppon& {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, object_t>)
+            return visitor(arg, index);
+        if constexpr (std::is_same_v<type, array_t>)
+            return visitor(arg, index);
+        if constexpr (std::is_same_v<type, nullptr_t>) {
+            // autovivify the root as an object if it is null
+            return vivify(object, index);
+        }
+        throw type_mismatch_error{};
+    }, static_cast<value_t&>(object));
+}
+
+inline cppon& vivify(cppon& slot, string_view_t key) {
+    if (all_digits(key.substr(0, key.find('/')))) {
+        // next key is a number
+        if (slot.try_object()) throw type_mismatch_error{};
+        if (slot.try_array() == nullptr) slot = cppon{ array_t{} };
+        auto& arr = std::get<array_t>(slot);
+        arr.reserve(array_min_reserve);
+        return visitor(arr, key);
+    }
+    else {
+        // next key is a string
+        if (slot.try_array()) throw type_mismatch_error{};
+        if (slot.try_object() == nullptr) slot = cppon{ object_t{} };
+        auto& obj = std::get<object_t>(slot);
+        obj.reserve(object_min_reserve);
+        return visitor(obj, key);
+    }
+
+}
+
+/**
+ * @brief Retrieves the blob data from a cppon object.
+ *
+ * This function attempts to retrieve the blob data from a given cppon object. If the object contains a `blob_string_t`,
+ * it decodes the base64 string into a `blob_t` and updates the cppon object. If the object already contains a `blob_t`,
+ * it simply returns it. If the object contains neither, it throws a `type_mismatch_error`.
+ *
+ * @param value The cppon object from which to retrieve the blob data.
+ * @param raise Whether to raise an exception if base64 decoding fails. If false, returns an empty blob instead.
+ *              Defaults to true.
+ * @return A reference to the blob data contained within the cppon object.
+ *
+ * @exception type_mismatch_error Thrown if the cppon object does not contain a `blob_string_t` or `blob_t`.
+ * @exception invalid_base64_error Thrown if the base64 string is invalid and `raise` is set to true.
+ */
+inline blob_t& get_blob(cppon& value, bool raise = true) {
+    return std::visit([&](auto&& arg) -> blob_t& {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_blob(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_blob(*arg);
+        }
+        else if constexpr (std::is_same_v<type, blob_string_t>) {
+            value = decode_base64(arg, raise);
+            return std::get<blob_t>(value);
+        }
+        else if constexpr (std::is_same_v<type, blob_t>) {
+            return arg;
+        }
+        else {
+            throw type_mismatch_error{};
+        }
+        }, value);
+}
+
+/**
+ * @brief Retrieves a constant reference to blob data from a cppon object.
+ *
+ * This function attempts to retrieve a constant reference to the blob data from a given cppon object.
+ * Unlike the non-const version, this function does not perform any conversion of `blob_string_t` to `blob_t`.
+ * If the object contains a `blob_t`, it returns a reference to it. If the object contains a `blob_string_t`,
+ * it throws a `blob_not_realized_error` since the blob must be decoded first. For all other types, it throws
+ * a `type_mismatch_error`.
+ *
+ * @param value The cppon object from which to retrieve the blob data.
+ * @return A constant reference to the blob data contained within the cppon object.
+ *
+ * @exception type_mismatch_error Thrown if the cppon object does not contain a `blob_t` or `blob_string_t`.
+ * @exception blob_not_realized_error Thrown if the cppon object contains a `blob_string_t` (not yet decoded).
+ */
+inline const blob_t& get_blob(const cppon& value) {
+    return std::visit([&](const auto& arg) -> const blob_t& {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_blob(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_blob(*arg);
+        }
+        else if constexpr (std::is_same_v<type, blob_string_t>) {
+            throw blob_not_realized_error{};
+        }
+        else if constexpr (std::is_same_v<type, blob_t>) {
+            return arg;
+        }
+        else {
+            throw type_mismatch_error{};
+        }
+        }, value);
+}
+
+/**
+ * @brief Retrieves a value of type T from a cppon value, ensuring strict type matching.
+ *
+ * This function attempts to retrieve a value of type T from the cppon variant. If the value is of type
+ * number_t, it first converts it to the appropriate numeric type using convert_to_numeric. If the value
+ * is already of type T, it is returned directly. If the value is of a different type, a type_mismatch_error
+ * is thrown.
+ *
+ * @tparam T The type to retrieve. Must be a numeric type.
+ * @param value The cppon value from which to retrieve the type T value.
+ * @return T The value of type T.
+ *
+ * @throws type_mismatch_error if the value is not of type T or cannot be converted to type T.
+ *
+ * @note This function uses std::visit to handle different types stored in the cppon variant.
+ */
+template<typename T>
+T get_strict(cppon& value) {
+    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, pointer_t> || std::is_same_v<T, number_t>, "T must be a numeric type");
+    return std::visit([&](auto&& arg) -> T {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_strict<T>(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_strict<T>(*arg);
+        }
+        else if constexpr (std::is_same_v<type, number_t>) {
+            if (thread::exact_number_mode) {
+                auto copy = value;
+                convert_to_numeric(copy);
+                return get_strict<T>(copy);
+            }
+            convert_to_numeric(value);
+            return get_strict<T>(value);
+        }
+        else if constexpr (std::is_same_v<type, T>) {
+            return arg;
+        }
+        else {
+            throw type_mismatch_error{};
+        }
+        }, value);
+}
+
+template<typename T>
+T get_strict(const cppon& value) {
+    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, pointer_t> || std::is_same_v<T, number_t>, "T must be a numeric type");
+    return std::visit([&](const auto& arg) -> T {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_strict<T>(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_strict<T>(*arg);
+        }
+        else if constexpr (std::is_same_v<type, number_t>) {
+            if (thread::exact_number_mode) {
+                auto copy = value;
+                convert_to_numeric(copy);
+                return get_strict<T>(copy);
+            }
+            throw number_not_converted_error{};
+        }
+        else if constexpr (std::is_same_v<type, T>) {
+            return arg;
+        }
+        else {
+            throw type_mismatch_error{};
+        }
+        }, value);
+}
+
+/**
+ * @brief Retrieves a value of type T from a cppon value, allowing type casting.
+ *
+ * This function attempts to retrieve a value of type T from the cppon variant. If the value is of type
+ * number_t, it first converts it to the appropriate numeric type using convert_to_numeric. If the value
+ * is of a different numeric type, it is cast to type T. If the value is of a non-numeric type, a
+ * type_mismatch_error is thrown.
+ *
+ * @tparam T The type to retrieve. Must be a numeric type.
+ * @param value The cppon value from which to retrieve the type T value.
+ * @return T The value of type T.
+ *
+ * @throws type_mismatch_error if the value is not a numeric type and cannot be cast to type T.
+ *
+ * @note This function uses std::visit to handle different types stored in the cppon variant.
+ */
+template<typename T>
+T get_cast(cppon& value) {
+    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, pointer_t> || std::is_same_v<T, number_t>, "T must be a numeric type");
+    return std::visit([&](auto&& arg) -> T {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_cast<T>(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_cast<T>(*arg);
+        }
+        else if constexpr (std::is_same_v<type, number_t>) {
+            if (thread::exact_number_mode) {
+                auto copy = value;
+                convert_to_numeric(copy);
+                return get_cast<T>(copy);
+            }
+            convert_to_numeric(value);
+            return get_cast<T>(value);
+        }
+        else if constexpr (std::is_arithmetic_v<type>) {
+            return static_cast<T>(arg);
+        }
+        else {
+            throw type_mismatch_error{};
+        }
+        }, value);
+}
+
+template<typename T>
+T get_cast(const cppon& value) {
+    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, pointer_t> || std::is_same_v<T, number_t>, "T must be a numeric type");
+    return std::visit([&](auto&& arg) -> T {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_cast<T>(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_cast<T>(*arg);
+        }
+        else if constexpr (std::is_same_v<type, number_t>) {
+            if (thread::exact_number_mode) {
+                auto copy = value;
+                convert_to_numeric(copy);
+                return get_cast<T>(copy);
+            }
+            throw number_not_converted_error{};
+        }
+        else if constexpr (std::is_arithmetic_v<type>) {
+            return static_cast<T>(arg);
+        }
+        else {
+            throw type_mismatch_error{};
+        }
+        }, value);
+}
+
+template<typename T>
+constexpr T* get_optional(cppon& value) noexcept {
+    return std::visit([&](auto&& arg) -> T* {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_optional<T>(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_optional<T>(*arg);
+        }
+        else if constexpr (std::is_same_v<type, number_t>) {
+            if (thread::exact_number_mode) {
+                auto copy = value;
+                convert_to_numeric(copy);
+                return get_optional<T>(copy);
+            }
+            convert_to_numeric(value);
+            return get_optional<T>(value);
+        }
+        else {
+            return std::get_if<T>(&value);
+        }
+        }, value);
+}
+
+template<typename T>
+constexpr const T* get_optional(const cppon& value) noexcept {
+    return std::visit([&](auto&& arg) -> const T* {
+        using type = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<type, path_t>) {
+            return get_optional<T>(deref_if_ptr(value));
+        }
+        else if constexpr (std::is_same_v<type, pointer_t>) {
+            return get_optional<T>(*arg);
+        }
+        else if constexpr (std::is_same_v<type, number_t>) {
+            if (thread::exact_number_mode) {
+                auto copy = value;
+                convert_to_numeric(copy);
+                return get_optional<T>(copy);
+            }
+            throw number_not_converted_error{};
+        }
+        else {
+            return std::get_if<T>(&value);
+        }
+        }, value);
+}
+
+} // namespace visitors
+
+using visitors::get_blob;
+using visitors::get_strict;
+using visitors::get_cast;
+using visitors::get_optional;
+
+} // namespace ch5
+
+#endif // CPPON_VISITORS_H
+
+/*
+ * C++ON - High performance C++17 JSON parser with extended features
+ * https://github.com/methanium/cppon
+ *
+ * File: c++on-literals.h : C++ON User-defined literals
+ *
+ * MIT License
+ * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
+ *
+ * See LICENSE file for complete license details
+ */
+
+#ifndef CPPON_LITERALS_H
+#define CPPON_LITERALS_H
+
+// Inputs used by the parser must be NUL-terminated (sentinel '\0' readable at data()[size()]).
+// UDLs below rely on const char* (no size_t) to preserve that invariant. For raw binary blobs,
+// use (const char*, size_t) because embedded 0x00 are expected.
+
+namespace ch5 {
+namespace literals {
+
+// Parse a JSON string literal to a cppon (full eval, blobs not decoded)
+inline cppon operator"" _cpponf(const char* s, size_t n) {
+    return eval(string_view_t{s, n}, options::eval);
+}
+
+// Parse a JSON string literal to a cppon (quick: lazy numbers)
+inline cppon operator"" _cppon(const char* s, size_t n) {
+    return eval(string_view_t{s, n}, options::quick);
+}
+
+// Parse an options object literal for to_string(...)
+inline cppon operator"" _options(const char* s, size_t n) {
+    return eval(string_view_t{s, n}, options::eval);
+}
+
+// Build a path_t from "/..."
+inline path_t operator"" _path(const char* s, size_t n) {
+#ifndef NDEBUG
+    CPPON_ASSERT(s && s[0] == '/'); // path literals must start with '/'
+#endif
+    return path_t{ string_view_t{s, n} };
+}
+
+// Build a blob_string_t from base64 text (undecoded)
+inline blob_string_t operator"" _blob64(const char* s, size_t n) {
+    return blob_string_t{ string_view_t{s, n} };
+}
+
+// Build a raw binary blob (blob_t) directly from the literal bytes
+inline blob_t operator"" _blob(const char* s, size_t n) {
+    return blob_t{ reinterpret_cast<const uint8_t*>(s), reinterpret_cast<const uint8_t*>(s) + n };
+}
+
+// ------------------------------------------------------------
+// Optional aliases (more idiomatic names, forward to above):
+//   _jsonf -> _cpponf
+//   _json  -> _cppon
+//   _opts  -> _options
+//   _b64   -> _blob64
+// Keep both for ergonomics and doc alignment.
+// ------------------------------------------------------------
+inline cppon operator"" _jsonf(const char* s, size_t n) { return operator"" _cpponf(s, n); }
+inline cppon operator"" _json(const char* s, size_t n) { return operator"" _cppon(s, n); }
+inline cppon operator"" _opts(const char* s, size_t n) { return operator"" _options(s, n); }
+inline blob_string_t operator"" _b64(const char* s, size_t n) { return operator"" _blob64(s, n); }
+
+} // namespace literals
+} // namespace ch5
+
+
+#endif // CPPON_LITERALS_H
+
+/*
+ * C++ON - High performance C++17 JSON parser with extended features
+ * https://github.com/methanium/cppon
+ *
+ * File: c++on-document.h : CPPON document wrapper
+ *
+ * MIT License
+ * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
+ *
+ * See LICENSE file for complete license details
+ */
 
 #ifndef CPPON_DOCUMENT_H
 #define CPPON_DOCUMENT_H
@@ -6172,11 +6514,13 @@ class document : public cppon {
 
     void eval_and_assign(const options parse_mode) {
         static_cast<cppon&>(*this) = ch5::eval(_buffer, parse_mode);
-        visitors::push_root(*this);
+        roots::push_root(*this);
     }
 
 public:
     document() = default;
+
+    explicit document(nullptr_t) : cppon{ nullptr } {}
 
     // Construct + eval (copies text)
     explicit document(const char* text, const options opt = Quick) {
@@ -6293,20 +6637,279 @@ public:
 
     // Load file (noexcept, returns invalid document on failure)
     static document from_file(const std::string& filename, std::string& error, const options opt = Quick) noexcept {
-        try {
-            return from_file(filename, opt);
+        std::ifstream in(filename, std::ios::binary);
+        if (in) {
+            in.seekg(0, std::ios::end);
+            std::string buf(static_cast<size_t>(in.tellg()), 0x00);
+            in.seekg(0, std::ios::beg);
+            in.read(buf.data(), static_cast<std::streamsize>(buf.size()));
+            if (in) return document{ std::move(buf), opt };
+            error = "Failed to read from file: " + filename;
         }
-        catch(const std::exception& e) {
-            error = e.what();
-            document doc; static_cast<cppon&>(doc) = nullptr; // invalid document
-            return doc;
-        }
+		else error = "Failed to open file: " + filename;
+        return document{ nullptr };
     }
 };
 
 } // namespace ch5
 
 #endif // CPPON_DOCUMENT_H
+
+/*
+ * C++ON - High performance C++17 JSON parser with extended features
+ * https://github.com/methanium/cppon
+ *
+ * File: c++on-config.h : C++ON Configuration and Settings
+ *
+ * MIT License
+ * Copyright (c) 2019-2025 Manuel Zaccaria (methanium) / CH5 Design
+ *
+ * See LICENSE file for complete license details
+ */
+
+#ifndef CPPON_CONFIG_H
+#define CPPON_CONFIG_H
+
+namespace ch5 {
+
+class config;
+inline SimdLevel effective_simd_level() noexcept;
+inline SimdLevel set_effective_simd_level();
+inline const config& get_config(string_view_t key) noexcept;
+inline const std::array<string_view_t, 10>& get_vars() noexcept;
+inline void update_config(size_t index);
+
+class config : public cppon {
+    inline static thread_local size_t dirty = ~0ULL;
+public:
+    config() = default;
+    config(const cppon& lhr) : cppon{ lhr } {}
+    config(cppon&& lvr) : cppon{ std::move(lvr) } {}
+    config(const config&) = default;
+    config(config&&) noexcept = default;
+    ~config() noexcept = default;
+    config& operator=(const config&) = default;
+    config& operator=(config&&) noexcept = default;
+
+    inline void update() {
+        if (dirty == ~0ULL) return;
+        update_config(dirty);
+        dirty = ~0ULL;
+    }
+
+    inline config& operator[](string_view_t path) {
+        auto& vars = get_vars();
+        auto& var = cppon::operator[](path);
+        auto name = path.substr(path.rfind("/") + 1);
+        auto found = std::find(vars.begin(), vars.end(), name);
+        dirty = (found == vars.end()) ? ~0ULL : distance(vars.begin(), found);
+        return static_cast<config&>(var);
+    }
+    inline config& operator[](size_t index) {
+        dirty = ~0ULL;
+        return static_cast<config&>(cppon::operator[](index));
+    }
+    inline const config& operator[](string_view_t path) const {
+        return static_cast<const config&>(cppon::operator[](path));
+    }
+    inline const config& operator[](size_t index) const {
+        return static_cast<const config&>(cppon::operator[](index));
+    }
+
+    config& operator=(const char* val) {
+        cppon::operator=( val );
+        update();
+        return *this;
+    }
+
+    config& operator=(pointer_t pointer) {
+        cppon::operator=(pointer);
+        update();
+        return *this;
+    }
+
+    template<
+        typename T,
+        typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+    config& operator=(const T& val) {
+        cppon::operator=(val);
+        update();
+        return *this;
+    }
+
+    template<
+        typename T,
+        typename = std::enable_if_t<is_in_variant_rv<T, value_t>::value>>
+    config& operator=(T&& val) {
+        cppon::operator=(std::forward<T>(val));
+        update();
+        return *this;
+    }
+};
+
+inline static thread_local config Config{
+    { object_t{
+        { "parser", { object_t{
+            { "prefix", { object_t{
+                { "path", { string_view_t{CPPON_PATH_PREFIX} } },
+                { "blob", { string_view_t{CPPON_BLOB_PREFIX} } },
+                { "number", { string_view_t{CPPON_NUMBER_PREFIX} } }
+            } } },
+            { "exact", {false} }
+        } } },
+        { "scanner", { object_t{
+            { "simd", { object_t{
+                { "global", { nullptr } },
+                { "thread", { nullptr } },
+                { "current", { nullptr } }
+            } } }
+        } } },
+        { "memory", { object_t{
+            { "reserve", { object_t{
+                { "object", { (int64_t)CPPON_OBJECT_MIN_RESERVE } },
+                { "array", { (int64_t)CPPON_ARRAY_MIN_RESERVE } },
+                { "printer", { (int64_t)CPPON_PRINTER_RESERVE_PER_ELEMENT } }
+            } } }
+        } } }
+    } }
+};
+
+inline const config& get_config(string_view_t key) noexcept {
+    try {
+        return Config[key];
+    }
+    catch (...) { return static_cast<const config&>(null()); }
+}
+inline bool has_config(string_view_t key) noexcept {
+    return get_config(key).is_null() ? false : true;
+}
+template<
+    typename T,
+    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+inline config& set_config(string_view_t key, const T& value) {
+    return Config[key] = value;
+}
+template<
+    typename T,
+    typename = std::enable_if_t<is_in_variant_rv<T, value_t>::value>>
+inline config& set_config(string_view_t key, T&& value) {
+    return Config[key] = std::move(value);
+}
+
+inline void set_path_prefix(string_view_t prefix) {
+    set_config("parser/prefixes/path", prefix);
+}
+inline void set_blob_prefix(string_view_t prefix) {
+    set_config("parser/prefixes/blob", prefix);
+}
+inline void set_number_prefix(string_view_t prefix) {
+    set_config("parser/prefixes/number", prefix);
+}
+inline void set_exact_number_mode(boolean_t mode) {
+    set_config("parser/exact", mode);
+}
+inline boolean_t get_exact_number_mode() noexcept {
+    return thread::exact_number_mode;
+}
+inline void set_global_simd_override(SimdLevel Level) {
+    thread::set_global_simd_override(Level);
+    set_config("scanner/simd/global", (int64_t)thread::effective_simd_level());
+}
+inline void clear_global_simd_override() {
+    thread::clear_global_simd_override();
+    set_config("scanner/simd/global", nullptr);
+}
+inline void set_thread_simd_override(SimdLevel Level) {
+    thread::set_thread_simd_override(Level);
+    set_config("scanner/simd/thread", (int64_t)thread::effective_simd_level());
+}
+inline void clear_thread_simd_override() {
+    thread::clear_thread_simd_override();
+    set_config("scanner/simd/thread", nullptr);
+}
+inline SimdLevel set_effective_simd_level(SimdLevel Level) {
+    set_config("scanner/simd/current", (int64_t)Level);
+    return thread::effective_simd_level();
+}
+inline SimdLevel effective_simd_level() noexcept {
+    return thread::effective_simd_level();
+}
+inline void set_object_min_reserve(std::byte reserve) {
+    set_config("memory/reserve/object", int64_t(reserve));
+}
+inline void set_array_min_reserve(std::byte reserve) {
+    set_config("memory/reserve/array", int64_t(reserve));
+}
+inline void set_printer_reserve_per_element(std::byte reserve) {
+    set_config("memory/reserve/printer", int64_t(reserve));
+}
+
+constexpr static std::array<string_view_t, 10> vars{
+    "path", "blob", "number", "exact", "global",
+    "thread", "current", "object", "array", "printer" };
+
+constexpr static std::array<void(*)(), 103> updaters{
+    [] {const config& path = get_config("parser/prefix/path");
+        if (path.is_null()) thread::path_prefix.current = CPPON_PATH_PREFIX;
+        else if (thread::path_prefix != std::get<string_view_t>(path))
+            thread::path_prefix = std::get<string_view_t>(path);
+    },
+    [] {const auto& blob = get_config("parser/prefix/blob");
+        if (blob.is_null()) thread::blob_prefix.current = CPPON_BLOB_PREFIX;
+        else if (thread::blob_prefix != std::get<string_view_t>(blob))
+            thread::blob_prefix = std::get<string_view_t>(blob);
+    },
+    [] {const auto& number = get_config("parser/prefix/number");
+        if (number.is_null()) thread::number_prefix.current = CPPON_NUMBER_PREFIX;
+        else if (thread::number_prefix != std::get<string_view_t>(number))
+            thread::number_prefix = std::get<string_view_t>(number);
+    },
+    [] {const auto& exact = get_config("parser/exact");
+        if (exact.is_null()) thread::exact_number_mode.current = false;
+        else if (get_cast<boolean_t>(exact) != thread::exact_number_mode)
+            thread::exact_number_mode.current = get_cast<boolean_t>(exact);
+    },
+    [] {const auto& global = get_config("scanner/simd/global");
+        const auto& thread = get_config("scanner/simd/thread");
+        const auto& current = get_config("scanner/simd/current");
+        if (global.is_null()) thread::clear_global_simd_override();
+        else thread::set_global_simd_override((SimdLevel)get_cast<int64_t>(global));
+        if (thread.is_null()) thread::clear_thread_simd_override();
+        else thread::set_thread_simd_override((SimdLevel)get_cast<int64_t>(thread));
+        if (global.is_null() && thread.is_null() && (SimdLevel)get_cast<int64_t>(current) != thread::effective_simd_level()) {
+            thread::set_thread_simd_override((SimdLevel)get_cast<int64_t>(current));
+        }
+        thread::simd_default.current = (int64_t)thread::effective_simd_level();
+    },
+    [] {updaters[4]();},
+    [] {updaters[4]();},
+    [] {const auto& object = get_config("memory/reserve/object");
+        if (object.is_null()) thread::object_min_reserve.current = CPPON_OBJECT_MIN_RESERVE;
+        else if (get_cast<int64_t>(object) != thread::object_min_reserve)
+            thread::object_min_reserve.current = get_cast<int64_t>(object);
+    },
+    [] {const auto& array = get_config("memory/reserve/array");
+        if (array.is_null()) thread::array_min_reserve.current = CPPON_ARRAY_MIN_RESERVE;
+        else if (get_cast<int64_t>(array) != thread::array_min_reserve)
+            thread::array_min_reserve.current = get_cast<int64_t>(array);
+    },
+    [] {const auto& printer = get_config("memory/reserve/printer");
+        if (printer.is_null()) thread::printer_reserve_per_element.current = CPPON_PRINTER_RESERVE_PER_ELEMENT;
+        else if (get_cast<int64_t>(printer) != thread::printer_reserve_per_element)
+            thread::printer_reserve_per_element.current = get_cast<int64_t>(printer);
+    } };
+
+inline void update_config(size_t index) {
+    updaters[index]();
+}
+
+inline const std::array<string_view_t, 10>& get_vars() noexcept {
+    return vars;
+}
+
+} // namespace ch5
+
+#endif // CPPON_CONFIG_H
 
 
 #endif // CPPON_H

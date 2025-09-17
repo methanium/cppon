@@ -1,9 +1,9 @@
 #define CPPON_TRUSTED_INPUT
-#define _CPPON_ENABLE_SIMD
+#define CPPON_ENABLE_SIMD
 #define _CPPON_ONLY_SCALAR_TESTS
 
 #ifndef CPPON_BENCH_ADVANCED
-#define CPPON_BENCH_ADVANCED 0  // 0 = only min/max/avg; 1 = also median/p95
+#define CPPON_BENCH_ADVANCED 1  // 0 = only min/max/avg; 1 = also median/p95
 #endif
 #ifndef CPPON_BENCH_EXPERIMENTS
 #define CPPON_BENCH_EXPERIMENTS 0 // 0 = no extra runs; 1 = extra Default run/calibration blocks
@@ -11,7 +11,7 @@
 
 #include <platform/processor_features_info.h>
 #include <utils/string_buffer.h>
-#include <cppon/c++on.h>
+#include <cppon/../../single_include/cppon/c++on.h>
 
 #include <iostream>
 #include <fstream>
@@ -103,6 +103,23 @@ void run_tests() {
 		auto features_ex = Info.features_info_ex();
 		auto cpu_features = Info.cpu_features();
 		auto extended_features = Info.structured_extended_features();
+
+		//ch5::Config["parser/exact"] = true;
+		ch5::set_exact_number_mode(true);
+		auto exact = ch5::eval(R"({
+			"data": {
+				"in32": 1234i32,
+				"in64": 12345678901234i64,
+				"float": 1234.4567f
+			 },
+			"ref": "$cppon-path:/data/float"
+		})");
+		auto log = to_string(exact, R"({"compact":false})");
+		ch5::Config["parser/exact"] = false;
+
+		ch5::cppon arr{ ch5::array_t{ {1}, {2}, {3} } };
+		ch5::cppon subtree{ ch5::object_t{ {"a", {1} }, {"b", {2} }, {"c", {3} } } };
+		ch5::cppon value{ ch5::object_t{ { "a", subtree } } };
 
 		auto obj = ch5::eval(R"({
 			"data": {"x":"v"},

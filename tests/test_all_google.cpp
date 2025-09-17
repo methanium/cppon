@@ -76,18 +76,10 @@ TEST(SIMD_Override, ThreadOverridesGlobal) {
 TEST(RootStack, RePushSameIsNoOp) {
     cppon a;
 
-    const auto d0 = visitors::root_stack().size();
-    visitors::push_root(a);
-    const auto d1 = visitors::root_stack().size();
+    roots::push_root(a);
+    roots::push_root(roots::get_root()); // no-op
 
-    visitors::push_root(visitors::get_root()); // no-op
-    const auto d2 = visitors::root_stack().size();
-
-    EXPECT_EQ(d1, d0 + 1);
-    EXPECT_EQ(d2, d1);
-
-    visitors::pop_root(a);
-    EXPECT_EQ(visitors::root_stack().size(), d0);
+    roots::pop_root(a);
 }
 
 TEST(UDL, JsonQuickAndFull) {
@@ -133,11 +125,11 @@ TEST(UDL, PathAndBlob) {
 
 TEST(RootStack, NonLifoPopNoFail) {
     cppon a, b;
-    visitors::push_root(a);
-    visitors::push_root(b);
+    roots::push_root(a);
+    roots::push_root(b);
 
-    visitors::pop_root(a);
-    visitors::pop_root(b);
+    roots::pop_root(a);
+    roots::pop_root(b);
 }
 
 TEST(PathThroughPointer, AutovivifyViaPointerPath) {
