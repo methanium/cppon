@@ -29,9 +29,9 @@ Its speed follows from a simple design and the effective use of modern C++, prio
 ## 🌟 Features
 
 <table style="border-collapse: collapse; border: none;">
-<tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;C++17</strong></td><td style="border: none;">Clean, modern API leveraging std::variant and string_view. <strong>NEW</strong>: Full <strong>C++20</strong> compatibility.</td></tr>
+<tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;C++17</strong></td><td style="border: none;">Clean, modern API leveraging std::variant and string_view</td></tr>
 <tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Header-only</strong></td><td style="border: none;">Simple integration without external dependencies</td></tr>
-<tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Document wrapper</strong></td><td style="border: none;">High-level <code>document</code> class for complete lifecycle management</td></tr>
+<tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Document API</strong></td><td style="border: none;">High-level <code>document</code> class for complete lifecycle management</td></tr>
 <tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Extended types</strong></td><td style="border: none;">Typed numbers with C++ suffixes (i8, u16, …)</td></tr>
 <tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Binary blobs</strong></td><td style="border: none;">Built‑in base64 encode/decode, realized on demand</td></tr>
 <tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Compatibility</strong></td><td style="border: none;">Standards‑compliant JSON output mode</td></tr>
@@ -47,6 +47,8 @@ Advanced capabilities:
 - Reference flattening at print time with cycle detection (cycles are emitted as paths).
 - Defensive bounds: max array delta, index validation, precise exceptions.
 - Pointer safety guard which blocks unsafe pointer assignments.
+
+<br><strong>NEW</strong>: Full <strong>C++20</strong> compatibility.
 
 ## 🔧 Installation
 
