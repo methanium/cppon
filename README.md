@@ -2,7 +2,7 @@
 
 > A high-performance C++17 JSON parser with references, paths, and binary blobs
 
-Current version: v0.1.0
+Current version: v0.2.0
 
 **C++ON** is an ultra-fast header-only library for parsing and generating JSON in C++. Designed for performance, it leverages modern SIMD instructions while offering an elegant API and advanced features absent from traditional JSON parsers.
 
