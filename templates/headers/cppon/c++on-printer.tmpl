@@ -90,9 +90,9 @@ inline auto apply_options(const cppon& Options) {
 					std::visit([&](auto&& Val) {
 						using type = std::decay_t<decltype(Val)>;
 						if constexpr (std::is_same_v<type, boolean_t>) {
-							if (Label == "reset") Reseting = Val;
-							else if (Label == "retain") Retaining = Val;
-							else if (Label == "reserve") Reserving = Val;
+							if (Label == string_view_t("reset")) Reseting = Val;
+							else if (Label == string_view_t("retain")) Retaining = Val;
+							else if (Label == string_view_t("reserve")) Reserving = Val;
 							else throw bad_option_error("buffer: invalid option");
 						}
 						else throw bad_option_error("buffer: type mismatch");
@@ -100,10 +100,10 @@ inline auto apply_options(const cppon& Options) {
 				}
 			}
 			else if constexpr (std::is_same_v<type, string_view_t>) {
-				if (Opt == "reset") Reseting = static_cast<int>(true);
-				else if (Opt == "retain") Retaining = static_cast<int>(true);
-				else if (Opt == "noreserve") Reserving = static_cast<int>(false);
-				else if (Opt == "reserve") Reserving = static_cast<int>(true);
+				if (Opt == string_view_t("reset")) Reseting = static_cast<int>(true);
+				else if (Opt == string_view_t("retain")) Retaining = static_cast<int>(true);
+				else if (Opt == string_view_t("noreserve")) Reserving = static_cast<int>(false);
+				else if (Opt == string_view_t("reserve")) Reserving = static_cast<int>(true);
 				else throw bad_option_error("buffer: invalid option");
 			}
 			else throw bad_option_error("buffer: type mismatch");
@@ -190,23 +190,23 @@ inline auto apply_options(const cppon& Options) {
 			else if constexpr (std::is_same_v<type, object_t>) {
 				for (auto& [Name, Value] : Opt) {
 					const auto& Label{ Name };
-					if (Label == "compact") {
+					if (Label == string_view_t("compact")) {
 						visit_compact(Value);
 					}
 					else {
 						std::visit([&](auto&& Val) {
 							using type = std::decay_t<decltype(Val)>;
 							if constexpr (std::is_same_v<type, boolean_t>) {
-								if (Label == "flatten") Flattening = Val;
-								else if (Label == "json") Compatible = Val;
-								else if (Label == "cppon") Compatible = !Val;
-								else if (Label == "exact") Exact = Val;
-								else if (Label == "pretty") Alternative = Val;
+								if (Label == string_view_t("flatten")) Flattening = Val;
+								else if (Label == string_view_t("json")) Compatible = Val;
+								else if (Label == string_view_t("cppon")) Compatible = !Val;
+								else if (Label == string_view_t("exact")) Exact = Val;
+								else if (Label == string_view_t("pretty")) Alternative = Val;
 								else throw bad_option_error("layout: invalid option");
 							}
 							else if constexpr (std::is_arithmetic_v<type>) {
-								if (Label == "margin") Margin = static_cast<int>(Val);
-								else if (Label == "tabulation") Tabulation = static_cast<int>(Val);
+								if (Label == string_view_t("margin")) Margin = static_cast<int>(Val);
+								else if (Label == string_view_t("tabulation")) Tabulation = static_cast<int>(Val);
 								else throw bad_option_error("layout: invalid option");
 							}
 							else throw bad_option_error("layout: type mismatch");
@@ -215,10 +215,10 @@ inline auto apply_options(const cppon& Options) {
 				}
 			}
 			else if constexpr (std::is_same_v<type, string_view_t>) {
-				if (Opt == "flatten") Flattening = true;
-				else if (Opt == "json") Compatible = true;
-				else if (Opt == "cppon") Compatible = false;
-				else if (Opt == "exact") Exact = true;
+				if (Opt == string_view_t("flatten")) Flattening = true;
+				else if (Opt == string_view_t("json")) Compatible = true;
+				else if (Opt == string_view_t("cppon")) Compatible = false;
+				else if (Opt == string_view_t("exact")) Exact = true;
 				else throw bad_option_error("layout: invalid option");
 			}
 			else throw bad_option_error("layout: type mismatch");
@@ -838,6 +838,11 @@ inline void print(printer& Printer, const string_view_t Text) {
 	Printer.print(Text);
 	Printer.print('"');
 	}
+inline void print(printer& Printer, const string_t Text) {
+	Printer.print('"');
+	Printer.print(Text);
+	Printer.print('"');
+}
 inline void print(printer& Printer, const array_t& Array) {
 	bool once = true;
 	string_view_t Stack;

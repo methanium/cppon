@@ -71,6 +71,7 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
  * #define CPPON_ENABLE_SIMD              - Opt-in: enable SIMD paths (SSE/AVX2/AVX512 if available)
  * #define CPPON_TRUSTED_INPUT            - Enable fast path for skip_spaces on trusted input
  * #define CPPON_ENABLE_STD_GET_INJECTION - Enable std::get injection into ch5 namespace
+ * #define CPPON_IMPLICIT_CONVERSION      - Enable implicit conversion operators
  */
 
 #ifndef CPPON_PATH_PREFIX
@@ -99,6 +100,14 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
 
 #ifndef CPPON_ARRAY_MIN_RESERVE
 #define CPPON_ARRAY_MIN_RESERVE 8
+#endif
+
+#ifndef CPPON_OBJECT_SAFE_RESERVE
+#define CPPON_OBJECT_SAFE_RESERVE 8
+#endif
+
+#ifndef CPPON_ARRAY_SAFE_RESERVE
+#define CPPON_ARRAY_SAFE_RESERVE 8
 #endif
 
 #ifndef CPPON_ENABLE_SIMD
@@ -3018,6 +3027,48 @@ inline void convert_to_numeric(value_t& value) {
     }, value);
 }
 
+#if __cplusplus > 201703L
+// Comparison operators for C++20
+
+inline bool operator==(const path_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value == rhs;
+}
+inline bool operator==(std::string_view lhs, const path_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(const number_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value == rhs;
+}
+inline bool operator==(std::string_view lhs, const number_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(const blob_string_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value == rhs;
+}
+inline bool operator==(std::string_view lhs, const blob_string_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+
+inline bool operator!=(const path_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value != rhs;
+}
+inline bool operator!=(std::string_view lhs, const path_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(const number_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value != rhs;
+}
+inline bool operator!=(std::string_view lhs, const number_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(const blob_string_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value != rhs;
+}
+inline bool operator!=(std::string_view lhs, const blob_string_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+#endif // C++20
+
 } // namespace ch5
 
 #endif // CPPON_ALTERNATIVES_H
@@ -3442,6 +3493,43 @@ public:
     cppon& operator=(const cppon&) = default;
     cppon& operator=(cppon&&) noexcept = default;
 
+    #if __cplusplus > 201703L
+    // Implicit constructors for C++20
+
+    // Containers
+    cppon(array_t&& arr) : value_t(std::move(arr)) {}
+    cppon(const array_t& arr) : value_t(arr) {}
+    cppon(object_t&& obj) : value_t(std::move(obj)) {}
+    cppon(const object_t& obj) : value_t(obj) {}
+
+    // Litterals
+    cppon(nullptr_t) : value_t(nullptr) {}
+    cppon(boolean_t b) : value_t(b) {}
+
+    // Numbers
+    cppon(double_t d) : value_t(d) {}
+    cppon(float_t f) : value_t(f) {}
+    cppon(int8_t i8) : value_t(i8) {}
+    cppon(uint8_t u8) : value_t(u8) {}
+    cppon(int16_t i16) : value_t(i16) {}
+    cppon(uint16_t u16) : value_t(u16) {}
+    cppon(int32_t i32) : value_t(i32) {}
+    cppon(uint32_t u32) : value_t(u32) {}
+    cppon(int64_t i64) : value_t(i64) {}
+    cppon(uint64_t u64) : value_t(u64) {}
+
+    // Stringish and specific types
+    cppon(const string_view_t& sv) : value_t(sv) {}
+    cppon(string_t&& s) : value_t(std::move(s)) {}
+    cppon(const string_t& s) : value_t(s) {}
+    cppon(const number_t& n) : value_t(n) {}
+    cppon(const path_t& p) : value_t(p) {}
+    cppon(const blob_string_t& bs) : value_t(bs) {}
+    cppon(blob_t&& b) : value_t(std::move(b)) {}
+    cppon(const blob_t& b) : value_t(b) {}
+    cppon(pointer_t ptr) : value_t(ptr) {}
+    #endif // C++20
+
     /**
     * @brief Verifies that a cppon object is valid and throws an exception if it is not
     *
@@ -3531,6 +3619,118 @@ public:
     inline auto& operator=(T&& val) {
         ensure_valid();
         value_t::operator=(std::forward<T>(val)); return *this;
+    }
+
+    template<typename T,
+        typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+    #ifndef CPPON_IMPLICIT_CONVERSION
+    explicit
+    #endif
+    operator T() const {
+        ensure_valid();
+        return std::visit([this](auto&& arg) -> T {
+            using type = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_arithmetic_v<type>)
+                return static_cast<T>(arg);
+            else if constexpr (std::is_same_v<type, number_t>) {
+                auto temp = *this;
+				convert_to_numeric(temp);
+                return static_cast<T>(temp);
+            }
+            else
+                throw type_mismatch_error{};
+            }, static_cast<const value_t&>(*this));
+    }
+
+    template<typename T,
+        typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+    #ifndef CPPON_IMPLICIT_CONVERSION
+    explicit
+    #endif
+    operator T() {
+        ensure_valid();
+        return std::visit([this](auto&& arg) -> T {
+            using type = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_arithmetic_v<type>)
+                return static_cast<T>(arg);
+            else if constexpr (std::is_same_v<type, number_t>) {
+                auto temp = *this;
+				convert_to_numeric(temp);
+                return static_cast<T>(temp);
+            }
+            else
+                throw type_mismatch_error{};
+            }, static_cast<value_t&>(*this));
+    }
+
+    #ifndef CPPON_IMPLICIT_CONVERSION
+    explicit
+    #endif
+    operator string_view_t() const {
+        ensure_valid();
+        return std::visit([](auto&& arg) -> string_view_t {
+            using type = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<type, string_view_t> || std::is_same_v<type, number_t>)
+                return arg;
+            else if constexpr (std::is_same_v<type, string_t>)
+                return string_view_t(arg);
+            else
+                throw type_mismatch_error{};
+        }, static_cast<const value_t&>(*this));
+    }
+
+    #ifndef CPPON_IMPLICIT_CONVERSION
+    explicit
+    #endif
+    operator string_view_t() {
+        ensure_valid();
+        return std::visit([](auto&& arg) -> string_view_t {
+            using type = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<type, string_view_t> || std::is_same_v<type, number_t>)
+                return arg;
+            else if constexpr (std::is_same_v<type, string_t>)
+                return string_view_t(arg);
+            else
+                throw type_mismatch_error{};
+        }, static_cast<value_t&>(*this));
+    }
+
+    #ifndef CPPON_IMPLICIT_CONVERSION
+    explicit
+    #endif
+    operator string_t() const {
+        ensure_valid();
+        return std::visit([](auto&& arg) -> string_t {
+            using type = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<type, string_view_t> || std::is_same_v<type, number_t>)
+                return string_t(arg);
+            else if constexpr (std::is_same_v<type, string_t>)
+                return arg;
+            else if constexpr (std::is_arithmetic_v<type>) {
+                return std::to_string(arg);
+            }
+            else
+                throw type_mismatch_error{};
+        }, static_cast<const value_t&>(*this));
+    }
+
+    #ifndef CPPON_IMPLICIT_CONVERSION
+    explicit
+    #endif
+    operator string_t() {
+        ensure_valid();
+        return std::visit([](auto&& arg) -> string_t {
+            using type = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<type, string_view_t> || std::is_same_v<type, number_t>)
+                return string_t(arg);
+            else if constexpr (std::is_same_v<type, string_t>)
+                return arg;
+            else if constexpr (std::is_arithmetic_v<type>) {
+                return std::to_string(arg);
+            }
+            else
+                throw type_mismatch_error{};
+        }, static_cast<value_t&>(*this));
     }
 
     // Underlying container access (throws type_mismatch_error on wrong type)
@@ -3695,6 +3895,8 @@ inline static thread_local SimdLevel max_simd_level = SimdLevel::None;
 #endif
 inline static thread_local config_var<int64_t> object_min_reserve{ CPPON_OBJECT_MIN_RESERVE };
 inline static thread_local config_var<int64_t> array_min_reserve{ CPPON_ARRAY_MIN_RESERVE };
+inline static thread_local config_var<int64_t> object_safe_reserve{ CPPON_OBJECT_SAFE_RESERVE };
+inline static thread_local config_var<int64_t> array_safe_reserve{ CPPON_ARRAY_SAFE_RESERVE };
 inline static thread_local config_var<int64_t> printer_reserve_per_element{ CPPON_PRINTER_RESERVE_PER_ELEMENT };
 inline static thread_local config_var<string_view_t> path_prefix{ CPPON_PATH_PREFIX };
 inline static thread_local config_var<string_view_t> blob_prefix{ CPPON_BLOB_PREFIX };
@@ -4702,9 +4904,9 @@ inline auto apply_options(const cppon& Options) {
 					std::visit([&](auto&& Val) {
 						using type = std::decay_t<decltype(Val)>;
 						if constexpr (std::is_same_v<type, boolean_t>) {
-							if (Label == "reset") Reseting = Val;
-							else if (Label == "retain") Retaining = Val;
-							else if (Label == "reserve") Reserving = Val;
+							if (Label == string_view_t("reset")) Reseting = Val;
+							else if (Label == string_view_t("retain")) Retaining = Val;
+							else if (Label == string_view_t("reserve")) Reserving = Val;
 							else throw bad_option_error("buffer: invalid option");
 						}
 						else throw bad_option_error("buffer: type mismatch");
@@ -4712,10 +4914,10 @@ inline auto apply_options(const cppon& Options) {
 				}
 			}
 			else if constexpr (std::is_same_v<type, string_view_t>) {
-				if (Opt == "reset") Reseting = static_cast<int>(true);
-				else if (Opt == "retain") Retaining = static_cast<int>(true);
-				else if (Opt == "noreserve") Reserving = static_cast<int>(false);
-				else if (Opt == "reserve") Reserving = static_cast<int>(true);
+				if (Opt == string_view_t("reset")) Reseting = static_cast<int>(true);
+				else if (Opt == string_view_t("retain")) Retaining = static_cast<int>(true);
+				else if (Opt == string_view_t("noreserve")) Reserving = static_cast<int>(false);
+				else if (Opt == string_view_t("reserve")) Reserving = static_cast<int>(true);
 				else throw bad_option_error("buffer: invalid option");
 			}
 			else throw bad_option_error("buffer: type mismatch");
@@ -4802,23 +5004,23 @@ inline auto apply_options(const cppon& Options) {
 			else if constexpr (std::is_same_v<type, object_t>) {
 				for (auto& [Name, Value] : Opt) {
 					const auto& Label{ Name };
-					if (Label == "compact") {
+					if (Label == string_view_t("compact")) {
 						visit_compact(Value);
 					}
 					else {
 						std::visit([&](auto&& Val) {
 							using type = std::decay_t<decltype(Val)>;
 							if constexpr (std::is_same_v<type, boolean_t>) {
-								if (Label == "flatten") Flattening = Val;
-								else if (Label == "json") Compatible = Val;
-								else if (Label == "cppon") Compatible = !Val;
-								else if (Label == "exact") Exact = Val;
-								else if (Label == "pretty") Alternative = Val;
+								if (Label == string_view_t("flatten")) Flattening = Val;
+								else if (Label == string_view_t("json")) Compatible = Val;
+								else if (Label == string_view_t("cppon")) Compatible = !Val;
+								else if (Label == string_view_t("exact")) Exact = Val;
+								else if (Label == string_view_t("pretty")) Alternative = Val;
 								else throw bad_option_error("layout: invalid option");
 							}
 							else if constexpr (std::is_arithmetic_v<type>) {
-								if (Label == "margin") Margin = static_cast<int>(Val);
-								else if (Label == "tabulation") Tabulation = static_cast<int>(Val);
+								if (Label == string_view_t("margin")) Margin = static_cast<int>(Val);
+								else if (Label == string_view_t("tabulation")) Tabulation = static_cast<int>(Val);
 								else throw bad_option_error("layout: invalid option");
 							}
 							else throw bad_option_error("layout: type mismatch");
@@ -4827,10 +5029,10 @@ inline auto apply_options(const cppon& Options) {
 				}
 			}
 			else if constexpr (std::is_same_v<type, string_view_t>) {
-				if (Opt == "flatten") Flattening = true;
-				else if (Opt == "json") Compatible = true;
-				else if (Opt == "cppon") Compatible = false;
-				else if (Opt == "exact") Exact = true;
+				if (Opt == string_view_t("flatten")) Flattening = true;
+				else if (Opt == string_view_t("json")) Compatible = true;
+				else if (Opt == string_view_t("cppon")) Compatible = false;
+				else if (Opt == string_view_t("exact")) Exact = true;
 				else throw bad_option_error("layout: invalid option");
 			}
 			else throw bad_option_error("layout: type mismatch");
@@ -5450,6 +5652,11 @@ inline void print(printer& Printer, const string_view_t Text) {
 	Printer.print(Text);
 	Printer.print('"');
 	}
+inline void print(printer& Printer, const string_t Text) {
+	Printer.print('"');
+	Printer.print(Text);
+	Printer.print('"');
+}
 inline void print(printer& Printer, const array_t& Array) {
 	bool once = true;
 	string_view_t Stack;
@@ -5731,6 +5938,18 @@ struct key_t {
 	explicit key_t(std::string_view v) : value(v) {}
 	operator std::string_view() const { return value; }
 };
+inline bool operator==(const key_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value == rhs;
+}
+inline bool operator==(std::string_view lhs, const key_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator!=(const key_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value != rhs;
+}
+inline bool operator!=(std::string_view lhs, const key_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
 
 /**
  * @brief Central utilities for managing cppon objects and their interconnections.
@@ -6120,7 +6339,7 @@ inline cppon& vivify(cppon& slot, string_view_t key) {
         if (slot.try_object()) throw type_mismatch_error{};
         if (slot.try_array() == nullptr) slot = cppon{ array_t{} };
         auto& arr = std::get<array_t>(slot);
-        arr.reserve(array_min_reserve);
+        arr.reserve(thread::array_safe_reserve);
         return visitor(arr, key);
     }
     else {
@@ -6128,7 +6347,7 @@ inline cppon& vivify(cppon& slot, string_view_t key) {
         if (slot.try_array()) throw type_mismatch_error{};
         if (slot.try_object() == nullptr) slot = cppon{ object_t{} };
         auto& obj = std::get<object_t>(slot);
-        obj.reserve(object_min_reserve);
+        obj.reserve(thread::object_safe_reserve);
         return visitor(obj, key);
     }
 
@@ -6298,7 +6517,11 @@ T get_strict(const cppon& value) {
  */
 template<typename T>
 T get_cast(cppon& value) {
-    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, pointer_t> || std::is_same_v<T, number_t>, "T must be a numeric type");
+    static_assert(
+        std::is_same_v<T, string_t> ||
+        std::is_same_v<T, pointer_t> ||
+        std::is_same_v<T, number_t> ||
+        std::is_arithmetic_v<T>, "T must be a numeric type or a string");
     return std::visit([&](auto&& arg) -> T {
         using type = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<type, path_t>) {
@@ -6316,8 +6539,17 @@ T get_cast(cppon& value) {
             convert_to_numeric(value);
             return get_cast<T>(value);
         }
-        else if constexpr (std::is_arithmetic_v<type>) {
+        else if constexpr (std::is_arithmetic_v<type> && std::is_arithmetic_v<T>) {
             return static_cast<T>(arg);
+        }
+        else if constexpr (std::is_arithmetic_v<type> && std::is_same_v<T, string_t>) {
+            return std::to_string(arg);
+        }
+        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_t>) {
+            return static_cast<string_t>(arg);
+        }
+        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_view_t>) {
+            return static_cast<string_view_t>(arg);
         }
         else {
             throw type_mismatch_error{};
@@ -6327,7 +6559,11 @@ T get_cast(cppon& value) {
 
 template<typename T>
 T get_cast(const cppon& value) {
-    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, pointer_t> || std::is_same_v<T, number_t>, "T must be a numeric type");
+    static_assert(
+        std::is_same_v<T, string_t> ||
+        std::is_same_v<T, pointer_t> ||
+        std::is_same_v<T, number_t> ||
+        std::is_arithmetic_v<T>, "T must be a numeric type or a string");
     return std::visit([&](auto&& arg) -> T {
         using type = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<type, path_t>) {
@@ -6344,8 +6580,17 @@ T get_cast(const cppon& value) {
             }
             throw number_not_converted_error{};
         }
-        else if constexpr (std::is_arithmetic_v<type>) {
+        else if constexpr (std::is_arithmetic_v<type> && std::is_arithmetic_v<T>) {
             return static_cast<T>(arg);
+        }
+        else if constexpr (std::is_arithmetic_v<type> && std::is_same_v<T, string_t>) {
+            return std::to_string(arg);
+        }
+        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_t>) {
+            return static_cast<string_t>(arg);
+        }
+        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_view_t>) {
+            return static_cast<string_view_t>(arg);
         }
         else {
             throw type_mismatch_error{};
@@ -6372,6 +6617,22 @@ constexpr T* get_optional(cppon& value) noexcept {
             convert_to_numeric(value);
             return get_optional<T>(value);
         }
+        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_view_t>) {
+            return &static_cast<string_view_t>(arg);
+        }
+        else if constexpr (std::is_same_v<type, string_t> && std::is_same_v<T, string_t>) {
+            return &arg;
+        }
+        else if constexpr (std::is_same_v<type, string_view_t> && std::is_same_v<T, string_t>) {
+            static thread_local string_t temp;
+            temp = static_cast<string_t>(arg);
+            return &temp;
+        }
+        else if constexpr (std::is_arithmetic_v<type> && std::is_arithmetic_v<T>) {
+            static thread_local T temp;
+            temp = static_cast<T>(arg);
+            return &temp;
+        }
         else {
             return std::get_if<T>(&value);
         }
@@ -6396,7 +6657,25 @@ constexpr const T* get_optional(const cppon& value) noexcept {
             }
             throw number_not_converted_error{};
         }
+        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_view_t>) {
+            return &static_cast<const string_view_t>(arg);
+        }
+        else if constexpr (std::is_same_v<type, string_t> && std::is_same_v<T, string_t>) {
+            return &arg;
+        }
+        else if constexpr (std::is_same_v<type, string_view_t> && std::is_same_v<T, string_t>) {
+            static thread_local string_t temp;
+            temp = static_cast<const string_t>(arg);
+            return &temp;
+        }
+        else if constexpr (std::is_arithmetic_v<type> && std::is_arithmetic_v<T>) {
+            static thread_local T temp;
+            temp = static_cast<T>(arg);
+            return &temp;
+        }
         else {
+            const T* p = std::get_if<T>(&value);
+            if (!p) return nullptr;
             return std::get_if<T>(&value);
         }
         }, value);
@@ -6674,9 +6953,9 @@ namespace ch5 {
 
 class config;
 inline SimdLevel effective_simd_level() noexcept;
-inline SimdLevel set_effective_simd_level();
+inline SimdLevel set_effective_simd_level(SimdLevel Level);
 inline const config& get_config(string_view_t key) noexcept;
-inline const std::array<string_view_t, 10>& get_vars() noexcept;
+inline const std::array<string_view_t, 12>& get_vars() noexcept;
 inline void update_config(size_t index);
 
 class config : public cppon {
@@ -6766,6 +7045,8 @@ inline static thread_local config Config{
         } } },
         { "memory", { object_t{
             { "reserve", { object_t{
+                { "object_safe", { (int64_t)CPPON_OBJECT_SAFE_RESERVE } },
+                { "array_safe", { (int64_t)CPPON_ARRAY_SAFE_RESERVE } },
                 { "object", { (int64_t)CPPON_OBJECT_MIN_RESERVE } },
                 { "array", { (int64_t)CPPON_ARRAY_MIN_RESERVE } },
                 { "printer", { (int64_t)CPPON_PRINTER_RESERVE_PER_ELEMENT } }
@@ -6834,6 +7115,12 @@ inline SimdLevel set_effective_simd_level(SimdLevel Level) {
 inline SimdLevel effective_simd_level() noexcept {
     return thread::effective_simd_level();
 }
+inline void set_object_safe_reserve(std::byte reserve) {
+    set_config("memory/reserve/object_safe", int64_t(reserve));
+}
+inline void set_array_safe_reserve(std::byte reserve) {
+    set_config("memory/reserve/array_safe", int64_t(reserve));
+}
 inline void set_object_min_reserve(std::byte reserve) {
     set_config("memory/reserve/object", int64_t(reserve));
 }
@@ -6844,29 +7131,29 @@ inline void set_printer_reserve_per_element(std::byte reserve) {
     set_config("memory/reserve/printer", int64_t(reserve));
 }
 
-constexpr static std::array<string_view_t, 10> vars{
+constexpr static std::array<string_view_t, 12> vars{
     "path", "blob", "number", "exact", "global",
-    "thread", "current", "object", "array", "printer" };
+    "thread", "current", "object_safe", "array_safe", "object", "array", "printer" };
 
-constexpr static std::array<void(*)(), 103> updaters{
+constexpr static std::array<void(*)(), 12> updaters{
     [] {const config& path = get_config("parser/prefix/path");
         if (path.is_null()) thread::path_prefix.current = CPPON_PATH_PREFIX;
-        else if (thread::path_prefix != std::get<string_view_t>(path))
+        else if (static_cast<string_view_t>(thread::path_prefix) != std::get<string_view_t>(path))
             thread::path_prefix = std::get<string_view_t>(path);
     },
     [] {const auto& blob = get_config("parser/prefix/blob");
         if (blob.is_null()) thread::blob_prefix.current = CPPON_BLOB_PREFIX;
-        else if (thread::blob_prefix != std::get<string_view_t>(blob))
+        else if (static_cast<string_view_t>(thread::blob_prefix) != std::get<string_view_t>(blob))
             thread::blob_prefix = std::get<string_view_t>(blob);
     },
     [] {const auto& number = get_config("parser/prefix/number");
         if (number.is_null()) thread::number_prefix.current = CPPON_NUMBER_PREFIX;
-        else if (thread::number_prefix != std::get<string_view_t>(number))
+        else if (static_cast<string_view_t>(thread::number_prefix) != std::get<string_view_t>(number))
             thread::number_prefix = std::get<string_view_t>(number);
     },
     [] {const auto& exact = get_config("parser/exact");
         if (exact.is_null()) thread::exact_number_mode.current = false;
-        else if (get_cast<boolean_t>(exact) != thread::exact_number_mode)
+        else if (get_cast<boolean_t>(exact) != static_cast<boolean_t>(thread::exact_number_mode))
             thread::exact_number_mode.current = get_cast<boolean_t>(exact);
     },
     [] {const auto& global = get_config("scanner/simd/global");
@@ -6881,21 +7168,31 @@ constexpr static std::array<void(*)(), 103> updaters{
         }
         thread::simd_default.current = (int64_t)thread::effective_simd_level();
     },
-    [] {updaters[4]();},
-    [] {updaters[4]();},
+    [] {updaters[4](); },
+    [] {updaters[4](); },
+    [] {const auto& object = get_config("memory/reserve/object_safe");
+        if (object.is_null()) thread::object_safe_reserve.current = CPPON_OBJECT_SAFE_RESERVE;
+        else if (get_cast<int64_t>(object) != static_cast<int64_t>(thread::object_safe_reserve))
+            thread::object_safe_reserve.current = get_cast<int64_t>(object);
+    },
+    [] {const auto& array = get_config("memory/reserve/array_safe");
+        if (array.is_null()) thread::array_safe_reserve.current = CPPON_ARRAY_SAFE_RESERVE;
+        else if (get_cast<int64_t>(array) != static_cast<int64_t>(thread::array_safe_reserve))
+            thread::array_safe_reserve.current = get_cast<int64_t>(array);
+    },
     [] {const auto& object = get_config("memory/reserve/object");
         if (object.is_null()) thread::object_min_reserve.current = CPPON_OBJECT_MIN_RESERVE;
-        else if (get_cast<int64_t>(object) != thread::object_min_reserve)
+        else if (get_cast<int64_t>(object) != static_cast<int64_t>(thread::object_min_reserve))
             thread::object_min_reserve.current = get_cast<int64_t>(object);
     },
     [] {const auto& array = get_config("memory/reserve/array");
         if (array.is_null()) thread::array_min_reserve.current = CPPON_ARRAY_MIN_RESERVE;
-        else if (get_cast<int64_t>(array) != thread::array_min_reserve)
+        else if (get_cast<int64_t>(array) != static_cast<int64_t>(thread::array_min_reserve))
             thread::array_min_reserve.current = get_cast<int64_t>(array);
     },
-    [] {const auto& printer = get_config("memory/reserve/printer");
+   [] {const auto& printer = get_config("memory/reserve/printer");
         if (printer.is_null()) thread::printer_reserve_per_element.current = CPPON_PRINTER_RESERVE_PER_ELEMENT;
-        else if (get_cast<int64_t>(printer) != thread::printer_reserve_per_element)
+        else if (get_cast<int64_t>(printer) != static_cast<int64_t>(thread::printer_reserve_per_element))
             thread::printer_reserve_per_element.current = get_cast<int64_t>(printer);
     } };
 
@@ -6903,7 +7200,7 @@ inline void update_config(size_t index) {
     updaters[index]();
 }
 
-inline const std::array<string_view_t, 10>& get_vars() noexcept {
+inline const std::array<string_view_t, 12>& get_vars() noexcept {
     return vars;
 }
 

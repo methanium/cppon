@@ -30,6 +30,18 @@ struct key_t {
 	explicit key_t(std::string_view v) : value(v) {}
 	operator std::string_view() const { return value; }
 };
+inline bool operator==(const key_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value == rhs;
+}
+inline bool operator==(std::string_view lhs, const key_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator!=(const key_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value != rhs;
+}
+inline bool operator!=(std::string_view lhs, const key_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
 
 /**
  * @brief Central utilities for managing cppon objects and their interconnections.
@@ -419,7 +431,7 @@ inline cppon& vivify(cppon& slot, string_view_t key) {
         if (slot.try_object()) throw type_mismatch_error{};
         if (slot.try_array() == nullptr) slot = cppon{ array_t{} };
         auto& arr = std::get<array_t>(slot);
-        arr.reserve(array_min_reserve);
+        arr.reserve(thread::array_safe_reserve);
         return visitor(arr, key);
     }
     else {
@@ -427,7 +439,7 @@ inline cppon& vivify(cppon& slot, string_view_t key) {
         if (slot.try_array()) throw type_mismatch_error{};
         if (slot.try_object() == nullptr) slot = cppon{ object_t{} };
         auto& obj = std::get<object_t>(slot);
-        obj.reserve(object_min_reserve);
+        obj.reserve(thread::object_safe_reserve);
         return visitor(obj, key);
     }
 
@@ -597,7 +609,11 @@ T get_strict(const cppon& value) {
  */
 template<typename T>
 T get_cast(cppon& value) {
-    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, pointer_t> || std::is_same_v<T, number_t>, "T must be a numeric type");
+    static_assert(
+        std::is_same_v<T, string_t> ||
+        std::is_same_v<T, pointer_t> ||
+        std::is_same_v<T, number_t> ||
+        std::is_arithmetic_v<T>, "T must be a numeric type or a string");
     return std::visit([&](auto&& arg) -> T {
         using type = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<type, path_t>) {
@@ -615,8 +631,17 @@ T get_cast(cppon& value) {
             convert_to_numeric(value);
             return get_cast<T>(value);
         }
-        else if constexpr (std::is_arithmetic_v<type>) {
+        else if constexpr (std::is_arithmetic_v<type> && std::is_arithmetic_v<T>) {
             return static_cast<T>(arg);
+        }
+        else if constexpr (std::is_arithmetic_v<type> && std::is_same_v<T, string_t>) {
+            return std::to_string(arg);
+        }
+        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_t>) {
+            return static_cast<string_t>(arg);
+        }
+        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_view_t>) {
+            return static_cast<string_view_t>(arg);
         }
         else {
             throw type_mismatch_error{};
@@ -626,7 +651,11 @@ T get_cast(cppon& value) {
 
 template<typename T>
 T get_cast(const cppon& value) {
-    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, pointer_t> || std::is_same_v<T, number_t>, "T must be a numeric type");
+    static_assert(
+        std::is_same_v<T, string_t> ||
+        std::is_same_v<T, pointer_t> ||
+        std::is_same_v<T, number_t> ||
+        std::is_arithmetic_v<T>, "T must be a numeric type or a string");
     return std::visit([&](auto&& arg) -> T {
         using type = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<type, path_t>) {
@@ -643,8 +672,17 @@ T get_cast(const cppon& value) {
             }
             throw number_not_converted_error{};
         }
-        else if constexpr (std::is_arithmetic_v<type>) {
+        else if constexpr (std::is_arithmetic_v<type> && std::is_arithmetic_v<T>) {
             return static_cast<T>(arg);
+        }
+        else if constexpr (std::is_arithmetic_v<type> && std::is_same_v<T, string_t>) {
+            return std::to_string(arg);
+        }
+        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_t>) {
+            return static_cast<string_t>(arg);
+        }
+        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_view_t>) {
+            return static_cast<string_view_t>(arg);
         }
         else {
             throw type_mismatch_error{};
@@ -671,6 +709,22 @@ constexpr T* get_optional(cppon& value) noexcept {
             convert_to_numeric(value);
             return get_optional<T>(value);
         }
+        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_view_t>) {
+            return &static_cast<string_view_t>(arg);
+        }
+        else if constexpr (std::is_same_v<type, string_t> && std::is_same_v<T, string_t>) {
+            return &arg;
+        }
+        else if constexpr (std::is_same_v<type, string_view_t> && std::is_same_v<T, string_t>) {
+            static thread_local string_t temp;
+            temp = static_cast<string_t>(arg);
+            return &temp;
+        }
+        else if constexpr (std::is_arithmetic_v<type> && std::is_arithmetic_v<T>) {
+            static thread_local T temp;
+            temp = static_cast<T>(arg);
+            return &temp;
+        }
         else {
             return std::get_if<T>(&value);
         }
@@ -695,7 +749,25 @@ constexpr const T* get_optional(const cppon& value) noexcept {
             }
             throw number_not_converted_error{};
         }
+        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_view_t>) {
+            return &static_cast<const string_view_t>(arg);
+        }
+        else if constexpr (std::is_same_v<type, string_t> && std::is_same_v<T, string_t>) {
+            return &arg;
+        }
+        else if constexpr (std::is_same_v<type, string_view_t> && std::is_same_v<T, string_t>) {
+            static thread_local string_t temp;
+            temp = static_cast<const string_t>(arg);
+            return &temp;
+        }
+        else if constexpr (std::is_arithmetic_v<type> && std::is_arithmetic_v<T>) {
+            static thread_local T temp;
+            temp = static_cast<T>(arg);
+            return &temp;
+        }
         else {
+            const T* p = std::get_if<T>(&value);
+            if (!p) return nullptr;
             return std::get_if<T>(&value);
         }
         }, value);

@@ -77,6 +77,8 @@ inline static thread_local SimdLevel max_simd_level = SimdLevel::None;
 #endif
 inline static thread_local config_var<int64_t> object_min_reserve{ CPPON_OBJECT_MIN_RESERVE };
 inline static thread_local config_var<int64_t> array_min_reserve{ CPPON_ARRAY_MIN_RESERVE };
+inline static thread_local config_var<int64_t> object_safe_reserve{ CPPON_OBJECT_SAFE_RESERVE };
+inline static thread_local config_var<int64_t> array_safe_reserve{ CPPON_ARRAY_SAFE_RESERVE };
 inline static thread_local config_var<int64_t> printer_reserve_per_element{ CPPON_PRINTER_RESERVE_PER_ELEMENT };
 inline static thread_local config_var<string_view_t> path_prefix{ CPPON_PATH_PREFIX };
 inline static thread_local config_var<string_view_t> blob_prefix{ CPPON_BLOB_PREFIX };

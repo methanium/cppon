@@ -49,6 +49,7 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
  * #define CPPON_ENABLE_SIMD              - Opt-in: enable SIMD paths (SSE/AVX2/AVX512 if available)
  * #define CPPON_TRUSTED_INPUT            - Enable fast path for skip_spaces on trusted input
  * #define CPPON_ENABLE_STD_GET_INJECTION - Enable std::get injection into ch5 namespace
+ * #define CPPON_IMPLICIT_CONVERSION      - Enable implicit conversion operators
  */
 
 #ifndef CPPON_PATH_PREFIX
@@ -77,6 +78,14 @@ inline constexpr unsigned cppon_version_hex() noexcept { return CPPON_VERSION_HE
 
 #ifndef CPPON_ARRAY_MIN_RESERVE
 #define CPPON_ARRAY_MIN_RESERVE 8
+#endif
+
+#ifndef CPPON_OBJECT_SAFE_RESERVE
+#define CPPON_OBJECT_SAFE_RESERVE 8
+#endif
+
+#ifndef CPPON_ARRAY_SAFE_RESERVE
+#define CPPON_ARRAY_SAFE_RESERVE 8
 #endif
 
 #ifndef CPPON_ENABLE_SIMD

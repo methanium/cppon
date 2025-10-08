@@ -6,6 +6,11 @@ Format: Inspired by Keep a Changelog (https://keepachangelog.com) and SemVer.
 ## [Unreleased]
 
 ### Added
+- Full C++20 compatibility support
+  - Implicit constructors for all variant types to match C++17 behavior
+  - Explicit comparison operators for custom types
+  - String literal to string_view_t explicit conversions for comparisons
+  - Dedicated print function for `string_t` type
 - Dynamic configuration system with thread-local settings and automatic updates
 - `config` class: Thread-safe configuration management with dirty flag tracking and automatic updates
 - `exact_number_mode`: Configuration option to preserve exact numeric representation rather than converting to JSON-compatible types
@@ -40,6 +45,10 @@ Format: Inspired by Keep a Changelog (https://keepachangelog.com) and SemVer.
 - `deref_if_ptr`: explicit support for `"$cppon-path:/"` (resolves to root).
 
 ### Fixed
+- Resolved C++20 compatibility issues with variant constructors and comparisons
+- Fixed string literal comparisons with string_view_t for C++20
+- Added explicit casts for type comparisons to work with C++20's stricter rules
+- Resolved overload ambiguities introduced by C++20's spaceship operator
 - Fixed comparison operators to properly handle type variants in different contexts
 - Improved error handling for configuration-related operations
 - Added safeguards to prevent invalid state propagation when updating configurations- Added critical safety checks to prevent undefined behavior when accessing objects in `valueless_by_exception` state

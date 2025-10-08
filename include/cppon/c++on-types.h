@@ -133,6 +133,43 @@ public:
     cppon& operator=(const cppon&) = default;
     cppon& operator=(cppon&&) noexcept = default;
 
+    #if __cplusplus > 201703L
+    // Implicit constructors for C++20
+
+    // Containers
+    cppon(array_t&& arr) : value_t(std::move(arr)) {}
+    cppon(const array_t& arr) : value_t(arr) {}
+    cppon(object_t&& obj) : value_t(std::move(obj)) {}
+    cppon(const object_t& obj) : value_t(obj) {}
+
+    // Litterals
+    cppon(nullptr_t) : value_t(nullptr) {}
+    cppon(boolean_t b) : value_t(b) {}
+
+    // Numbers
+    cppon(double_t d) : value_t(d) {}
+    cppon(float_t f) : value_t(f) {}
+    cppon(int8_t i8) : value_t(i8) {}
+    cppon(uint8_t u8) : value_t(u8) {}
+    cppon(int16_t i16) : value_t(i16) {}
+    cppon(uint16_t u16) : value_t(u16) {}
+    cppon(int32_t i32) : value_t(i32) {}
+    cppon(uint32_t u32) : value_t(u32) {}
+    cppon(int64_t i64) : value_t(i64) {}
+    cppon(uint64_t u64) : value_t(u64) {}
+
+    // Stringish and specific types
+    cppon(const string_view_t& sv) : value_t(sv) {}
+    cppon(string_t&& s) : value_t(std::move(s)) {}
+    cppon(const string_t& s) : value_t(s) {}
+    cppon(const number_t& n) : value_t(n) {}
+    cppon(const path_t& p) : value_t(p) {}
+    cppon(const blob_string_t& bs) : value_t(bs) {}
+    cppon(blob_t&& b) : value_t(std::move(b)) {}
+    cppon(const blob_t& b) : value_t(b) {}
+    cppon(pointer_t ptr) : value_t(ptr) {}
+    #endif // C++20
+
     /**
     * @brief Verifies that a cppon object is valid and throws an exception if it is not
     *
@@ -222,6 +259,118 @@ public:
     inline auto& operator=(T&& val) {
         ensure_valid();
         value_t::operator=(std::forward<T>(val)); return *this;
+    }
+
+    template<typename T,
+        typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+    #ifndef CPPON_IMPLICIT_CONVERSION
+    explicit
+    #endif
+    operator T() const {
+        ensure_valid();
+        return std::visit([this](auto&& arg) -> T {
+            using type = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_arithmetic_v<type>)
+                return static_cast<T>(arg);
+            else if constexpr (std::is_same_v<type, number_t>) {
+                auto temp = *this;
+				convert_to_numeric(temp);
+                return static_cast<T>(temp);
+            }
+            else
+                throw type_mismatch_error{};
+            }, static_cast<const value_t&>(*this));
+    }
+
+    template<typename T,
+        typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+    #ifndef CPPON_IMPLICIT_CONVERSION
+    explicit
+    #endif
+    operator T() {
+        ensure_valid();
+        return std::visit([this](auto&& arg) -> T {
+            using type = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_arithmetic_v<type>)
+                return static_cast<T>(arg);
+            else if constexpr (std::is_same_v<type, number_t>) {
+                auto temp = *this;
+				convert_to_numeric(temp);
+                return static_cast<T>(temp);
+            }
+            else
+                throw type_mismatch_error{};
+            }, static_cast<value_t&>(*this));
+    }
+
+    #ifndef CPPON_IMPLICIT_CONVERSION
+    explicit
+    #endif
+    operator string_view_t() const {
+        ensure_valid();
+        return std::visit([](auto&& arg) -> string_view_t {
+            using type = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<type, string_view_t> || std::is_same_v<type, number_t>)
+                return arg;
+            else if constexpr (std::is_same_v<type, string_t>)
+                return string_view_t(arg);
+            else
+                throw type_mismatch_error{};
+        }, static_cast<const value_t&>(*this));
+    }
+
+    #ifndef CPPON_IMPLICIT_CONVERSION
+    explicit
+    #endif
+    operator string_view_t() {
+        ensure_valid();
+        return std::visit([](auto&& arg) -> string_view_t {
+            using type = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<type, string_view_t> || std::is_same_v<type, number_t>)
+                return arg;
+            else if constexpr (std::is_same_v<type, string_t>)
+                return string_view_t(arg);
+            else
+                throw type_mismatch_error{};
+        }, static_cast<value_t&>(*this));
+    }
+
+    #ifndef CPPON_IMPLICIT_CONVERSION
+    explicit
+    #endif
+    operator string_t() const {
+        ensure_valid();
+        return std::visit([](auto&& arg) -> string_t {
+            using type = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<type, string_view_t> || std::is_same_v<type, number_t>)
+                return string_t(arg);
+            else if constexpr (std::is_same_v<type, string_t>)
+                return arg;
+            else if constexpr (std::is_arithmetic_v<type>) {
+                return std::to_string(arg);
+            }
+            else
+                throw type_mismatch_error{};
+        }, static_cast<const value_t&>(*this));
+    }
+
+    #ifndef CPPON_IMPLICIT_CONVERSION
+    explicit
+    #endif
+    operator string_t() {
+        ensure_valid();
+        return std::visit([](auto&& arg) -> string_t {
+            using type = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<type, string_view_t> || std::is_same_v<type, number_t>)
+                return string_t(arg);
+            else if constexpr (std::is_same_v<type, string_t>)
+                return arg;
+            else if constexpr (std::is_arithmetic_v<type>) {
+                return std::to_string(arg);
+            }
+            else
+                throw type_mismatch_error{};
+        }, static_cast<value_t&>(*this));
     }
 
     // Underlying container access (throws type_mismatch_error on wrong type)

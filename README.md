@@ -29,7 +29,7 @@ Its speed follows from a simple design and the effective use of modern C++, prio
 ## 🌟 Features
 
 <table style="border-collapse: collapse; border: none;">
-<tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;C++17</strong></td><td style="border: none;">Clean, modern API leveraging std::variant and string_view</td></tr>
+<tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;C++17</strong></td><td style="border: none;">Clean, modern API leveraging std::variant and string_view. <strong>NEW</strong>: Full <strong>C++20</strong> compatibility.</td></tr>
 <tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Header-only</strong></td><td style="border: none;">Simple integration without external dependencies</td></tr>
 <tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Document wrapper</strong></td><td style="border: none;">High-level <code>document</code> class for complete lifecycle management</td></tr>
 <tr><td style="border: none;">&nbsp;&nbsp;<strong>•&nbsp;&nbsp;Extended types</strong></td><td style="border: none;">Typed numbers with C++ suffixes (i8, u16, …)</td></tr>
@@ -227,7 +227,9 @@ Quick start: see [Basic usage](docs/BASIC_USAGE.md).
 
 - **Compilers :** GCC 7+, Clang 6+, MSVC 2019+
 - **Platforms :** Windows, Linux, macOS
-- **Standard  :** C++17 required
+- **Standard  :** C++17 required, C++20 fully supported
+
+Both C++17 and C++20 standards are fully supported. The library automatically adapts to the C++ standard used in your project without any configuration changes.
 
 ## 📄 License
 

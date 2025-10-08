@@ -19,9 +19,9 @@ namespace ch5 {
 
 class config;
 inline SimdLevel effective_simd_level() noexcept;
-inline SimdLevel set_effective_simd_level();
+inline SimdLevel set_effective_simd_level(SimdLevel Level);
 inline const config& get_config(string_view_t key) noexcept;
-inline const std::array<string_view_t, 10>& get_vars() noexcept;
+inline const std::array<string_view_t, 12>& get_vars() noexcept;
 inline void update_config(size_t index);
 
 class config : public cppon {
@@ -111,6 +111,8 @@ inline static thread_local config Config{
         } } },
         { "memory", { object_t{
             { "reserve", { object_t{
+                { "object_safe", { (int64_t)CPPON_OBJECT_SAFE_RESERVE } },
+                { "array_safe", { (int64_t)CPPON_ARRAY_SAFE_RESERVE } },
                 { "object", { (int64_t)CPPON_OBJECT_MIN_RESERVE } },
                 { "array", { (int64_t)CPPON_ARRAY_MIN_RESERVE } },
                 { "printer", { (int64_t)CPPON_PRINTER_RESERVE_PER_ELEMENT } }
@@ -179,6 +181,12 @@ inline SimdLevel set_effective_simd_level(SimdLevel Level) {
 inline SimdLevel effective_simd_level() noexcept {
     return thread::effective_simd_level();
 }
+inline void set_object_safe_reserve(std::byte reserve) {
+    set_config("memory/reserve/object_safe", int64_t(reserve));
+}
+inline void set_array_safe_reserve(std::byte reserve) {
+    set_config("memory/reserve/array_safe", int64_t(reserve));
+}
 inline void set_object_min_reserve(std::byte reserve) {
     set_config("memory/reserve/object", int64_t(reserve));
 }
@@ -189,29 +197,29 @@ inline void set_printer_reserve_per_element(std::byte reserve) {
     set_config("memory/reserve/printer", int64_t(reserve));
 }
 
-constexpr static std::array<string_view_t, 10> vars{
+constexpr static std::array<string_view_t, 12> vars{
     "path", "blob", "number", "exact", "global",
-    "thread", "current", "object", "array", "printer" };
+    "thread", "current", "object_safe", "array_safe", "object", "array", "printer" };
 
-constexpr static std::array<void(*)(), 103> updaters{
+constexpr static std::array<void(*)(), 12> updaters{
     [] {const config& path = get_config("parser/prefix/path");
         if (path.is_null()) thread::path_prefix.current = CPPON_PATH_PREFIX;
-        else if (thread::path_prefix != std::get<string_view_t>(path))
+        else if (static_cast<string_view_t>(thread::path_prefix) != std::get<string_view_t>(path))
             thread::path_prefix = std::get<string_view_t>(path);
     },
     [] {const auto& blob = get_config("parser/prefix/blob");
         if (blob.is_null()) thread::blob_prefix.current = CPPON_BLOB_PREFIX;
-        else if (thread::blob_prefix != std::get<string_view_t>(blob))
+        else if (static_cast<string_view_t>(thread::blob_prefix) != std::get<string_view_t>(blob))
             thread::blob_prefix = std::get<string_view_t>(blob);
     },
     [] {const auto& number = get_config("parser/prefix/number");
         if (number.is_null()) thread::number_prefix.current = CPPON_NUMBER_PREFIX;
-        else if (thread::number_prefix != std::get<string_view_t>(number))
+        else if (static_cast<string_view_t>(thread::number_prefix) != std::get<string_view_t>(number))
             thread::number_prefix = std::get<string_view_t>(number);
     },
     [] {const auto& exact = get_config("parser/exact");
         if (exact.is_null()) thread::exact_number_mode.current = false;
-        else if (get_cast<boolean_t>(exact) != thread::exact_number_mode)
+        else if (get_cast<boolean_t>(exact) != static_cast<boolean_t>(thread::exact_number_mode))
             thread::exact_number_mode.current = get_cast<boolean_t>(exact);
     },
     [] {const auto& global = get_config("scanner/simd/global");
@@ -226,21 +234,31 @@ constexpr static std::array<void(*)(), 103> updaters{
         }
         thread::simd_default.current = (int64_t)thread::effective_simd_level();
     },
-    [] {updaters[4]();},
-    [] {updaters[4]();},
+    [] {updaters[4](); },
+    [] {updaters[4](); },
+    [] {const auto& object = get_config("memory/reserve/object_safe");
+        if (object.is_null()) thread::object_safe_reserve.current = CPPON_OBJECT_SAFE_RESERVE;
+        else if (get_cast<int64_t>(object) != static_cast<int64_t>(thread::object_safe_reserve))
+            thread::object_safe_reserve.current = get_cast<int64_t>(object);
+    },
+    [] {const auto& array = get_config("memory/reserve/array_safe");
+        if (array.is_null()) thread::array_safe_reserve.current = CPPON_ARRAY_SAFE_RESERVE;
+        else if (get_cast<int64_t>(array) != static_cast<int64_t>(thread::array_safe_reserve))
+            thread::array_safe_reserve.current = get_cast<int64_t>(array);
+    },
     [] {const auto& object = get_config("memory/reserve/object");
         if (object.is_null()) thread::object_min_reserve.current = CPPON_OBJECT_MIN_RESERVE;
-        else if (get_cast<int64_t>(object) != thread::object_min_reserve)
+        else if (get_cast<int64_t>(object) != static_cast<int64_t>(thread::object_min_reserve))
             thread::object_min_reserve.current = get_cast<int64_t>(object);
     },
     [] {const auto& array = get_config("memory/reserve/array");
         if (array.is_null()) thread::array_min_reserve.current = CPPON_ARRAY_MIN_RESERVE;
-        else if (get_cast<int64_t>(array) != thread::array_min_reserve)
+        else if (get_cast<int64_t>(array) != static_cast<int64_t>(thread::array_min_reserve))
             thread::array_min_reserve.current = get_cast<int64_t>(array);
     },
-    [] {const auto& printer = get_config("memory/reserve/printer");
+   [] {const auto& printer = get_config("memory/reserve/printer");
         if (printer.is_null()) thread::printer_reserve_per_element.current = CPPON_PRINTER_RESERVE_PER_ELEMENT;
-        else if (get_cast<int64_t>(printer) != thread::printer_reserve_per_element)
+        else if (get_cast<int64_t>(printer) != static_cast<int64_t>(thread::printer_reserve_per_element))
             thread::printer_reserve_per_element.current = get_cast<int64_t>(printer);
     } };
 
@@ -248,7 +266,7 @@ inline void update_config(size_t index) {
     updaters[index]();
 }
 
-inline const std::array<string_view_t, 10>& get_vars() noexcept {
+inline const std::array<string_view_t, 12>& get_vars() noexcept {
     return vars;
 }
 

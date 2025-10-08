@@ -369,6 +369,48 @@ inline void convert_to_numeric(value_t& value) {
     }, value);
 }
 
+#if __cplusplus > 201703L
+// Comparison operators for C++20
+
+inline bool operator==(const path_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value == rhs;
+}
+inline bool operator==(std::string_view lhs, const path_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(const number_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value == rhs;
+}
+inline bool operator==(std::string_view lhs, const number_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(const blob_string_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value == rhs;
+}
+inline bool operator==(std::string_view lhs, const blob_string_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+
+inline bool operator!=(const path_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value != rhs;
+}
+inline bool operator!=(std::string_view lhs, const path_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(const number_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value != rhs;
+}
+inline bool operator!=(std::string_view lhs, const number_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(const blob_string_t& lhs, std::string_view rhs) noexcept {
+    return lhs.value != rhs;
+}
+inline bool operator!=(std::string_view lhs, const blob_string_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+#endif // C++20
+
 } // namespace ch5
 
 #endif // CPPON_ALTERNATIVES_H

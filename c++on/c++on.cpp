@@ -1,3 +1,4 @@
+#define CPPON_IMPLICIT_CONVERSION
 #define CPPON_TRUSTED_INPUT
 #define CPPON_ENABLE_SIMD
 #define _CPPON_ONLY_SCALAR_TESTS
@@ -117,24 +118,33 @@ void run_tests() {
 		auto log = to_string(exact, R"({"compact":false})");
 		ch5::Config["parser/exact"] = false;
 
+		ch5::cppon value{ ch5::number_t{ "42", ch5::NumberType::cpp_int32 } };
+		ch5::cppon text_value{ ch5::string_view_t{"Hello, World!"} };
+		int imp = value;
+		int exp = static_cast<const int>(value);
+		int i = ch5::get_cast<int>(value);                  // Explicit conversion
+		std::string s = ch5::get_cast<std::string>(value);  // Converts number to string
+		std::string s2 = value;                             // Implicit conversion to string
+		std::string s3 = text_value;
+
 		ch5::cppon arr{ ch5::array_t{ {1}, {2}, {3} } };
 		ch5::cppon subtree{ ch5::object_t{ {"a", {1} }, {"b", {2} }, {"c", {3} } } };
-		ch5::cppon value{ ch5::object_t{ { "a", subtree } } };
+		ch5::cppon val{ ch5::object_t{ { "a", subtree } } };
 
 		auto obj = ch5::eval(R"({
 			"data": {"x":"v"},
 			"ref": "$cppon-path:/data/x"
 		})");
-		// The token is stored as path_t until resolved
 
-		auto p = std::get<ch5::path_t>(obj["/ref"]).value;
+		// The token is stored as path_t until resolved
+		//auto p = std::get<ch5::path_t>(obj["/ref"]).value;
 
 		// "/data/x"
 		// Ensure the correct root when resolving the path:
 		// - Either use obj["/..."] once (absolute) before resolving,
 		// - Or use ch5::root_guard(obj) around the resolution.
-		auto& target = ch5::visitors::visitor(obj, p.substr(1)); // since we use
-		auto& v = std::get<std::string_view>(target);   // "v"
+		//auto& target = ch5::visitors::visitor(obj, p.substr(1)); // since we use
+		//auto& v = std::get<std::string_view>(target);   // "v"
 
 
 		ch5::cppon root{};
