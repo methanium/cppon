@@ -12,7 +12,8 @@
 
 #include <platform/processor_features_info.h>
 #include <utils/string_buffer.h>
-#include <cppon/../../single_include/cppon/c++on.h>
+//#include <cppon/../../single_include/cppon/c++on.h>
+#include <cppon/c++on.h>
 
 #include <iostream>
 #include <fstream>

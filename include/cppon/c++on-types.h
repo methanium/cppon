@@ -168,6 +168,11 @@ public:
     cppon(blob_t&& b) : value_t(std::move(b)) {}
     cppon(const blob_t& b) : value_t(b) {}
     cppon(pointer_t ptr) : value_t(ptr) {}
+
+    template<size_t N>
+    cppon(const char(&str)[N]) : value_t(string_view_t{ str, N - 1 }) {}
+    template<size_t N>
+    cppon(const char8_t(&str)[N]) : value_t(string_view_t{ reinterpret_cast<const char*>(str), N - 1 }) {}
     #endif // C++20
 
     /**
@@ -273,7 +278,7 @@ public:
             if constexpr (std::is_arithmetic_v<type>)
                 return static_cast<T>(arg);
             else if constexpr (std::is_same_v<type, number_t>) {
-                auto temp = *this;
+                cppon temp = *this;
 				convert_to_numeric(temp);
                 return static_cast<T>(temp);
             }
@@ -294,7 +299,7 @@ public:
             if constexpr (std::is_arithmetic_v<type>)
                 return static_cast<T>(arg);
             else if constexpr (std::is_same_v<type, number_t>) {
-                auto temp = *this;
+                cppon temp = *this;
 				convert_to_numeric(temp);
                 return static_cast<T>(temp);
             }
@@ -408,46 +413,93 @@ public:
     inline auto end() const { return array().end(); }
 };
 
+//template<
+//    typename T,
+//    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+//inline bool operator==(const cppon& lhs, const T& rhs) noexcept {
+//    if (lhs.valueless_by_exception())
+//        return false;
+//
+//    // Vérifier si le type stocké correspond à T
+//    const T* val = std::get_if<T>(&lhs);
+//    if (!val)
+//        return false;
+//
+//    // Comparer les valeurs
+//    return *val == rhs;
+//}
+//template<
+//    typename T,
+//    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+//inline bool operator==(const T& lhs, const cppon& rhs) noexcept {
+//    if (rhs.valueless_by_exception())
+//        return false;
+//
+//    // Vérifier si le type stocké correspond à T
+//    const T* val = std::get_if<T>(&rhs);
+//    if (!val)
+//        return false;
+//
+//    // Comparer les valeurs
+//    return lhs == *val;
+//}
+//
+//template<
+//    typename T,
+//    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+//inline bool operator!=(const cppon& lhs, const T& rhs) noexcept {
+//    return !(lhs == rhs);
+//}
+//template<
+//    typename T,
+//    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+//inline bool operator!=(const T& lhs, const cppon& rhs) noexcept {
+//    return !(lhs == rhs);
+//}
+
 template<
     typename T,
-    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+    typename = std::enable_if_t<
+        is_in_variant_lv<T, value_t>::value &&
+        !std::is_base_of_v<cppon, std::decay_t<T>>>>
 inline bool operator==(const cppon& lhs, const T& rhs) noexcept {
     if (lhs.valueless_by_exception())
         return false;
-
-    // Vérifier si le type stocké correspond à T
     const T* val = std::get_if<T>(&lhs);
     if (!val)
         return false;
-
-    // Comparer les valeurs
     return *val == rhs;
 }
+
 template<
     typename T,
-    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+    typename = std::enable_if_t<
+        is_in_variant_lv<T, value_t>::value &&
+        !std::is_base_of_v<cppon, std::decay_t<T>>>>
 inline bool operator==(const T& lhs, const cppon& rhs) noexcept {
     if (rhs.valueless_by_exception())
         return false;
-
-    // Vérifier si le type stocké correspond à T
     const T* val = std::get_if<T>(&rhs);
     if (!val)
         return false;
-
-    // Comparer les valeurs
     return lhs == *val;
 }
 
+// Pareil pour operator!=
 template<
     typename T,
-    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+    typename = std::enable_if_t<
+        is_in_variant_lv<T, value_t>::value &&
+        !std::is_base_of_v<cppon, std::decay_t<T>>>>
 inline bool operator!=(const cppon& lhs, const T& rhs) noexcept {
     return !(lhs == rhs);
 }
+
 template<
     typename T,
-    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+    typename = std::enable_if_t<
+        is_in_variant_lv<T, value_t>::value &&
+        !std::is_base_of_v<cppon, std::decay_t<T>>>>
 inline bool operator!=(const T& lhs, const cppon& rhs) noexcept {
     return !(lhs == rhs);
 }

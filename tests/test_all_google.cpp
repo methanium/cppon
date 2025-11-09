@@ -188,7 +188,7 @@ TEST(PathReseat, ReseatResolvesToNewTarget) {
 TEST(PointerNullPath, AutovivifyAtOriginWithoutMutatingNullSentinel) {
     using namespace ch5;
 
-    EXPECT_TRUE(visitors::null().is_null()); // sentinel
+    EXPECT_TRUE(thread::null.is_null()); // sentinel
 
     pointer_t pnull = nullptr;
     cppon root;
@@ -203,7 +203,7 @@ TEST(PointerNullPath, AutovivifyAtOriginWithoutMutatingNullSentinel) {
 
     EXPECT_EQ(get_cast<int>(root["/p/sub"]), 3);
     EXPECT_TRUE(std::holds_alternative<object_t>(root["/p"]));
-    EXPECT_TRUE(visitors::null().is_null()); // sentinel not promoted
+    EXPECT_TRUE(thread::null.is_null()); // sentinel not promoted
 }
 
 TEST(PathT_RootAndInvalid, RootAndEmpty) {

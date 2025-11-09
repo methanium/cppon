@@ -48,6 +48,11 @@ inline void rt_expect_true(bool cond, const char* expr, const char* file, int li
         rt_fail(os.str().c_str(), file, line);
     }
 }
+inline void rt_expect_false(bool cond, const char* expr, const char* file, int line) {
+    if (cond) { std::ostringstream os; os << "EXPECT_FALSE(" << expr << ") failed";
+        rt_fail(os.str().c_str(), file, line);
+    }
+}
 template<typename L, typename R>
 inline void rt_expect_eq(const L& lhs, const R& rhs, const char* ls, const char* rs, const char* file, int line) {
     if (!(lhs == rhs)) {std::ostringstream os;os << "EXPECT_EQ(" << ls << ", " << rs << ") failed: lhs != rhs";
@@ -78,6 +83,7 @@ inline int test_succeeded() {
 
 #define RUN_SUMMARY()         ::test_succeeded()
 #define EXPECT_TRUE(expr)     ::rt_expect_true((expr), #expr, __FILE__, __LINE__)
+#define EXPECT_FALSE(expr)    ::rt_expect_false((expr), #expr, __FILE__, __LINE__)
 #define EXPECT_EQ(lhs, rhs)   ::rt_expect_eq((lhs), (rhs), #lhs, #rhs, __FILE__, __LINE__)
 #define EXPECT_NE(lhs, rhs)   ::rt_expect_ne((lhs), (rhs), #lhs, #rhs, __FILE__, __LINE__)
 #define EXPECT_STREQ(a, b)    ::rt_expect_streq((std::string_view)(a), (std::string_view)(b), #a, #b, __FILE__, __LINE__)

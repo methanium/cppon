@@ -553,6 +553,17 @@ inline auto eval(const char (&text)[N], options opt = Eval) -> cppon {
 	return eval(string_view_t{ text, N ? N - 1 : 0 }, opt);
 }
 
+#if __cplusplus > 201703L
+// C++20: overloads for UTF8 litterals
+inline auto eval(const char8_t* text, options opt = Eval) -> cppon {
+    return eval(string_view_t{ reinterpret_cast<const char*>(text) }, opt);
+}
+template<size_t N>
+inline auto eval(const char8_t(&text)[N], options opt = Eval) -> cppon {
+    return eval(string_view_t{ text, N ? N - 1 : 0 }, opt);
+}
+#endif
+
 }//namespace parser
 
 using parser::eval;

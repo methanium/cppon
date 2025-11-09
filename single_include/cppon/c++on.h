@@ -3030,42 +3030,127 @@ inline void convert_to_numeric(value_t& value) {
 #if __cplusplus > 201703L
 // Comparison operators for C++20
 
-inline bool operator==(const path_t& lhs, std::string_view rhs) noexcept {
+inline bool operator==(const path_t& lhs, string_view_t rhs) noexcept {
     return lhs.value == rhs;
 }
-inline bool operator==(std::string_view lhs, const path_t& rhs) noexcept {
-    return lhs == rhs.value;
-}
-inline bool operator==(const number_t& lhs, std::string_view rhs) noexcept {
+inline bool operator==(const number_t& lhs, string_view_t rhs) noexcept {
     return lhs.value == rhs;
 }
-inline bool operator==(std::string_view lhs, const number_t& rhs) noexcept {
-    return lhs == rhs.value;
-}
-inline bool operator==(const blob_string_t& lhs, std::string_view rhs) noexcept {
+inline bool operator==(const blob_string_t& lhs, string_view_t rhs) noexcept {
     return lhs.value == rhs;
 }
-inline bool operator==(std::string_view lhs, const blob_string_t& rhs) noexcept {
+inline bool operator==(const path_t& lhs, const char* rhs) noexcept {
+    return lhs.value == std::string_view{ rhs };
+}
+inline bool operator==(const number_t& lhs, const char* rhs) noexcept {
+    return lhs.value == std::string_view{ rhs };
+}
+inline bool operator==(const blob_string_t& lhs, const char* rhs) noexcept {
+    return lhs.value == std::string_view{ rhs };
+}
+inline bool operator==(const path_t& lhs, const string_t& rhs) noexcept {
+    return lhs.value.data() == rhs;
+}
+inline bool operator==(const number_t& lhs, const string_t& rhs) noexcept {
+    return lhs.value.data() == rhs;
+}
+inline bool operator==(const blob_string_t& lhs, const string_t& rhs) noexcept {
+    return lhs.value.data() == rhs;
+}
+inline bool operator==(string_view_t lhs, const path_t& rhs) noexcept {
     return lhs == rhs.value;
+}
+inline bool operator==(string_view_t lhs, const number_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(string_view_t lhs, const blob_string_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(string_view_t lhs, const string_t& rhs) noexcept {
+    return lhs.data() == rhs;
+}
+inline bool operator==(const char* lhs, const path_t& rhs) noexcept {
+    return std::string_view{ lhs } == rhs.value;
+}
+inline bool operator==(const char* lhs, const number_t& rhs) noexcept {
+    return std::string_view{ lhs } == rhs.value;
+}
+inline bool operator==(const char* lhs, const blob_string_t& rhs) noexcept {
+    return std::string_view{ lhs } == rhs.value;
+}
+inline bool operator==(const string_t& lhs, const path_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(const string_t& lhs, const number_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(const string_t& lhs, const blob_string_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(const string_t& lhs, string_view_t rhs) noexcept {
+    return lhs == rhs.data();
 }
 
-inline bool operator!=(const path_t& lhs, std::string_view rhs) noexcept {
+
+inline bool operator!=(const path_t& lhs, string_view_t rhs) noexcept {
     return lhs.value != rhs;
 }
-inline bool operator!=(std::string_view lhs, const path_t& rhs) noexcept {
-    return lhs != rhs.value;
-}
-inline bool operator!=(const number_t& lhs, std::string_view rhs) noexcept {
+inline bool operator!=(const number_t& lhs, string_view_t rhs) noexcept {
     return lhs.value != rhs;
 }
-inline bool operator!=(std::string_view lhs, const number_t& rhs) noexcept {
-    return lhs != rhs.value;
-}
-inline bool operator!=(const blob_string_t& lhs, std::string_view rhs) noexcept {
+inline bool operator!=(const blob_string_t& lhs, string_view_t rhs) noexcept {
     return lhs.value != rhs;
 }
-inline bool operator!=(std::string_view lhs, const blob_string_t& rhs) noexcept {
+inline bool operator!=(const path_t& lhs, const char* rhs) noexcept {
+    return lhs.value != std::string_view{ rhs };
+}
+inline bool operator!=(const number_t& lhs, const char* rhs) noexcept {
+    return lhs.value != std::string_view{ rhs };
+}
+inline bool operator!=(const blob_string_t& lhs, const char* rhs) noexcept {
+    return lhs.value != std::string_view{ rhs };
+}
+inline bool operator!=(const path_t& rhs, const string_t& lhs) noexcept {
+    return rhs.value.data() != lhs;
+}
+inline bool operator!=(const number_t& lhs, const string_t& rhs) noexcept {
+    return lhs.value.data() != rhs;
+}
+inline bool operator!=(const blob_string_t& lhs, const string_t& rhs) noexcept {
+    return lhs.value.data() != rhs;
+}
+inline bool operator!=(string_view_t lhs, const path_t& rhs) noexcept {
     return lhs != rhs.value;
+}
+inline bool operator!=(string_view_t lhs, const number_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(string_view_t lhs, const blob_string_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(string_view_t lhs, const string_t& rhs) noexcept {
+    return lhs.data() != rhs;
+}
+inline bool operator!=(const char* lhs, const path_t& rhs) noexcept {
+    return std::string_view{ lhs } != rhs.value;
+}
+inline bool operator!=(const char* lhs, const number_t& rhs) noexcept {
+    return std::string_view{ lhs } != rhs.value;
+}
+inline bool operator!=(const char* lhs, const blob_string_t& rhs) noexcept {
+    return std::string_view{ lhs } != rhs.value;
+}
+inline bool operator!=(const string_t& lhs, const path_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(const string_t& lhs, const number_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(const string_t& lhs, const blob_string_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(const string_t& lhs, string_view_t rhs) noexcept {
+    return lhs != rhs.data();
 }
 #endif // C++20
 
@@ -3528,6 +3613,11 @@ public:
     cppon(blob_t&& b) : value_t(std::move(b)) {}
     cppon(const blob_t& b) : value_t(b) {}
     cppon(pointer_t ptr) : value_t(ptr) {}
+
+    template<size_t N>
+    cppon(const char(&str)[N]) : value_t(string_view_t{ str, N - 1 }) {}
+    template<size_t N>
+    cppon(const char8_t(&str)[N]) : value_t(string_view_t{ reinterpret_cast<const char*>(str), N - 1 }) {}
     #endif // C++20
 
     /**
@@ -3633,7 +3723,7 @@ public:
             if constexpr (std::is_arithmetic_v<type>)
                 return static_cast<T>(arg);
             else if constexpr (std::is_same_v<type, number_t>) {
-                auto temp = *this;
+                cppon temp = *this;
 				convert_to_numeric(temp);
                 return static_cast<T>(temp);
             }
@@ -3654,7 +3744,7 @@ public:
             if constexpr (std::is_arithmetic_v<type>)
                 return static_cast<T>(arg);
             else if constexpr (std::is_same_v<type, number_t>) {
-                auto temp = *this;
+                cppon temp = *this;
 				convert_to_numeric(temp);
                 return static_cast<T>(temp);
             }
@@ -3768,46 +3858,93 @@ public:
     inline auto end() const { return array().end(); }
 };
 
+//template<
+//    typename T,
+//    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+//inline bool operator==(const cppon& lhs, const T& rhs) noexcept {
+//    if (lhs.valueless_by_exception())
+//        return false;
+//
+//    // Vérifier si le type stocké correspond à T
+//    const T* val = std::get_if<T>(&lhs);
+//    if (!val)
+//        return false;
+//
+//    // Comparer les valeurs
+//    return *val == rhs;
+//}
+//template<
+//    typename T,
+//    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+//inline bool operator==(const T& lhs, const cppon& rhs) noexcept {
+//    if (rhs.valueless_by_exception())
+//        return false;
+//
+//    // Vérifier si le type stocké correspond à T
+//    const T* val = std::get_if<T>(&rhs);
+//    if (!val)
+//        return false;
+//
+//    // Comparer les valeurs
+//    return lhs == *val;
+//}
+//
+//template<
+//    typename T,
+//    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+//inline bool operator!=(const cppon& lhs, const T& rhs) noexcept {
+//    return !(lhs == rhs);
+//}
+//template<
+//    typename T,
+//    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+//inline bool operator!=(const T& lhs, const cppon& rhs) noexcept {
+//    return !(lhs == rhs);
+//}
+
 template<
     typename T,
-    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+    typename = std::enable_if_t<
+        is_in_variant_lv<T, value_t>::value &&
+        !std::is_base_of_v<cppon, std::decay_t<T>>>>
 inline bool operator==(const cppon& lhs, const T& rhs) noexcept {
     if (lhs.valueless_by_exception())
         return false;
-
-    // Vérifier si le type stocké correspond à T
     const T* val = std::get_if<T>(&lhs);
     if (!val)
         return false;
-
-    // Comparer les valeurs
     return *val == rhs;
 }
+
 template<
     typename T,
-    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+    typename = std::enable_if_t<
+        is_in_variant_lv<T, value_t>::value &&
+        !std::is_base_of_v<cppon, std::decay_t<T>>>>
 inline bool operator==(const T& lhs, const cppon& rhs) noexcept {
     if (rhs.valueless_by_exception())
         return false;
-
-    // Vérifier si le type stocké correspond à T
     const T* val = std::get_if<T>(&rhs);
     if (!val)
         return false;
-
-    // Comparer les valeurs
     return lhs == *val;
 }
 
+// Pareil pour operator!=
 template<
     typename T,
-    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+    typename = std::enable_if_t<
+        is_in_variant_lv<T, value_t>::value &&
+        !std::is_base_of_v<cppon, std::decay_t<T>>>>
 inline bool operator!=(const cppon& lhs, const T& rhs) noexcept {
     return !(lhs == rhs);
 }
+
 template<
     typename T,
-    typename = std::enable_if_t<is_in_variant_lv<T, value_t>::value>>
+    typename = std::enable_if_t<
+        is_in_variant_lv<T, value_t>::value &&
+        !std::is_base_of_v<cppon, std::decay_t<T>>>>
 inline bool operator!=(const T& lhs, const cppon& rhs) noexcept {
     return !(lhs == rhs);
 }
@@ -4814,6 +4951,17 @@ inline auto eval(const char (&text)[N], options opt = Eval) -> cppon {
 	return eval(string_view_t{ text, N ? N - 1 : 0 }, opt);
 }
 
+#if __cplusplus > 201703L
+// C++20: overloads for UTF8 litterals
+inline auto eval(const char8_t* text, options opt = Eval) -> cppon {
+    return eval(string_view_t{ reinterpret_cast<const char*>(text) }, opt);
+}
+template<size_t N>
+inline auto eval(const char8_t(&text)[N], options opt = Eval) -> cppon {
+    return eval(string_view_t{ text, N ? N - 1 : 0 }, opt);
+}
+#endif
+
 }//namespace parser
 
 using parser::eval;
@@ -4838,7 +4986,7 @@ using parser::eval;
 #define CPPON_PRINTER_H
 
 namespace ch5 {
-cppon printer_state::state::to_cppon() const {
+inline cppon printer_state::state::to_cppon() const {
 	cppon Options;
 	auto& buffer = Options["buffer"];
 	auto& layout = Options["layout"];
@@ -4893,7 +5041,7 @@ inline auto apply_options(const cppon& Options) {
 	// - retain:     retain the buffer after printing
 	// - noreserve:  do not reserve memory for printing the JSON representation
 	// - reserve:    reserve memory for printing the JSON representation
-	auto visit_buffer = [&](const value_t& Buffer) {
+	auto visit_buffer = [&](const cppon& Buffer) {
 		std::visit([&](auto&& Opt) {
 			using type = std::decay_t<decltype(Opt)>;
 			if constexpr (std::is_same_v<type, nullptr_t>)
@@ -4928,7 +5076,7 @@ inline auto apply_options(const cppon& Options) {
 	// - false:          do not compact any object
 	// - true:           compact all objects (print without indentation, space or newline)
 	// - ["label", ...]: compact objects with the specified labels, [] to reset list
-	auto visit_compact = [&](const value_t& Compact) {
+	auto visit_compact = [&](const cppon& Compact) {
 		std::visit([&](auto&& Opt) {
 			using type = std::decay_t<decltype(Opt)>;
 			if constexpr (std::is_same_v<type, nullptr_t>)
@@ -4951,7 +5099,7 @@ inline auto apply_options(const cppon& Options) {
 	// "pretty" : false | true
 	// - false: uses default layout for pretty printing
 	// - true:  uses alternative layout for pretty printing
-	auto visit_pretty = [&](const value_t& Compact) {
+	auto visit_pretty = [&](const cppon& Compact) {
 		std::visit([&](auto&& Opt) {
 			using type = std::decay_t<decltype(Opt)>;
 			if constexpr (std::is_same_v<type, nullptr_t>)
@@ -4963,7 +5111,7 @@ inline auto apply_options(const cppon& Options) {
 
 	// "margin" : value
 	// - value: set the margin to the specified value
-	auto visit_margin = [&](const value_t& MarginVal) {
+	auto visit_margin = [&](const cppon& MarginVal) {
 		std::visit([&](auto&& Opt) {
 			using type = std::decay_t<decltype(Opt)>;
 			if constexpr (std::is_same_v<type, nullptr_t>)
@@ -4976,7 +5124,7 @@ inline auto apply_options(const cppon& Options) {
 	// "tabulation" : value | [value, ...]
 	// - value:        set the tabulation to the specified value
 	// - [value, ...]: set the tabulations to the specified values
-	auto visit_tabulation = [&](const value_t& TabulationVal) {
+	auto visit_tabulation = [&](const cppon& TabulationVal) {
 		std::visit([&](auto&& Opt) {
 			using type = std::decay_t<decltype(Opt)>;
 			if constexpr (std::is_same_v<type, nullptr_t>)
@@ -4996,7 +5144,7 @@ inline auto apply_options(const cppon& Options) {
 	// --- cppon:   print the CPPON representation of the object
 	// --- pretty:  uses alternative layout for pretty printing
 	// --- compact: compact all or specified objects
-	auto visit_layout = [&](const value_t& Layout) {
+	auto visit_layout = [&](const cppon& Layout) {
 		std::visit([&](auto&& Opt) {
 			using type = std::decay_t<decltype(Opt)>;
 			if constexpr (std::is_same_v<type, nullptr_t>)
@@ -5413,6 +5561,11 @@ inline cppon configure_printer(string_view_t OptionsJson, bool get_previous = fa
 	return configure_printer(eval(OptionsJson), get_previous);
 }
 
+inline cppon configure_printer(const char* OptionsJson, bool get_previous = false) {
+	if (!OptionsJson) throw bad_option_error{ "empty options" }; // null pointer
+	return configure_printer(string_view_t{ OptionsJson }, get_previous);
+}
+
 /**
  * @brief Formats and prints floating-point numbers with appropriate precision.
  *
@@ -5784,30 +5937,57 @@ inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, const 
 	// return the printed JSON representation
 	return std::string_view{ State.Out };
 	}
-inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, string_view_t Options = {}) {
+
+inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, string_view_t Options) {
 	cppon Opt; if (!Options.empty()) Opt = eval(Options);
 	return to_string_view(Object, Refs, Opt);
+	}
+inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, const char* Options) {
+	return to_string_view(Object, Refs, string_view_t{ Options });
+	}
+inline auto to_string_view(const cppon& Object, reference_vector_t* Refs) {
+	return to_string_view(Object, Refs, cppon{});
 	}
 inline auto to_string_view(const cppon& Object, const cppon& Options) {
 	return to_string_view(Object, nullptr, Options);
 	}
-inline auto to_string_view(const cppon& Object, string_view_t Options = {}) {
+inline auto to_string_view(const cppon& Object, string_view_t Options) {
 	cppon Opt; if (!Options.empty()) Opt = eval(Options);
 	return to_string_view(Object, nullptr, Opt);
 	}
-inline auto to_string(const cppon& Object, reference_vector_t* Refs, const cppon& Options) -> std::string {
+inline auto to_string_view(const cppon& Object, const char* Options) {
+	return to_string_view(Object, nullptr, string_view_t{ Options });
+	}
+inline auto to_string_view(const cppon& Object) {
+	return to_string_view(Object, nullptr, cppon{});
+}
+
+
+inline auto to_string(const cppon& Object, reference_vector_t* Refs, const cppon& Options) {
 	return  std::string{ to_string_view(Object, Refs, Options) };
 }
-inline auto to_string(const cppon& Object, reference_vector_t* Refs, string_view_t Options = {}) {
+inline auto to_string(const cppon& Object, reference_vector_t* Refs, string_view_t Options) {
 	cppon Opt; if (!Options.empty()) Opt = eval(Options);
 	return std::string{ to_string_view(Object, Refs, Opt) };
+	}
+inline auto to_string(const cppon& Object, reference_vector_t* Refs, const char* Options) {
+	return to_string(Object, Refs, string_view_t{ Options });
+	}
+inline auto to_string(const cppon& Object, reference_vector_t* Refs) {
+	return std::string{ to_string_view(Object, Refs, cppon{}) };
 	}
 inline auto to_string(const cppon& Object, const cppon& Options) {
 	return std::string{ to_string_view(Object, nullptr, Options) };
 	}
-inline auto to_string(const cppon& Object, string_view_t Options = {}) {
+inline auto to_string(const cppon& Object, string_view_t Options) {
 	cppon Opt; if (!Options.empty()) Opt = eval(Options);
 	return std::string{ to_string_view(Object, nullptr, Opt) };
+	}
+inline auto to_string(const cppon& Object, const char* Options) {
+	return to_string(Object, nullptr, string_view_t{ Options });
+	}
+inline auto to_string(const cppon& Object) {
+	return std::string{ to_string_view(Object, nullptr, cppon{}) };
 	}
 
 }//namespace ch5
@@ -6617,11 +6797,13 @@ constexpr T* get_optional(cppon& value) noexcept {
             convert_to_numeric(value);
             return get_optional<T>(value);
         }
-        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_view_t>) {
-            return &static_cast<string_view_t>(arg);
-        }
-        else if constexpr (std::is_same_v<type, string_t> && std::is_same_v<T, string_t>) {
+        else if constexpr (std::is_same_v<type, T>) {
             return &arg;
+        }
+        else if constexpr (std::is_same_v<type, string_t> && std::is_same_v<T, string_view_t>) {
+            static thread_local string_view_t temp;
+            temp = static_cast<string_view_t>(arg);
+            return &temp;
         }
         else if constexpr (std::is_same_v<type, string_view_t> && std::is_same_v<T, string_t>) {
             static thread_local string_t temp;

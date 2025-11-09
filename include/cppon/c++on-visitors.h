@@ -709,11 +709,13 @@ constexpr T* get_optional(cppon& value) noexcept {
             convert_to_numeric(value);
             return get_optional<T>(value);
         }
-        else if constexpr ((std::is_same_v<type, string_t> || std::is_same_v<type, string_view_t>) && std::is_same_v<T, string_view_t>) {
-            return &static_cast<string_view_t>(arg);
-        }
-        else if constexpr (std::is_same_v<type, string_t> && std::is_same_v<T, string_t>) {
+        else if constexpr (std::is_same_v<type, T>) {
             return &arg;
+        }
+        else if constexpr (std::is_same_v<type, string_t> && std::is_same_v<T, string_view_t>) {
+            static thread_local string_view_t temp;
+            temp = static_cast<string_view_t>(arg);
+            return &temp;
         }
         else if constexpr (std::is_same_v<type, string_view_t> && std::is_same_v<T, string_t>) {
             static thread_local string_t temp;

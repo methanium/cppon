@@ -372,42 +372,127 @@ inline void convert_to_numeric(value_t& value) {
 #if __cplusplus > 201703L
 // Comparison operators for C++20
 
-inline bool operator==(const path_t& lhs, std::string_view rhs) noexcept {
+inline bool operator==(const path_t& lhs, string_view_t rhs) noexcept {
     return lhs.value == rhs;
 }
-inline bool operator==(std::string_view lhs, const path_t& rhs) noexcept {
-    return lhs == rhs.value;
-}
-inline bool operator==(const number_t& lhs, std::string_view rhs) noexcept {
+inline bool operator==(const number_t& lhs, string_view_t rhs) noexcept {
     return lhs.value == rhs;
 }
-inline bool operator==(std::string_view lhs, const number_t& rhs) noexcept {
-    return lhs == rhs.value;
-}
-inline bool operator==(const blob_string_t& lhs, std::string_view rhs) noexcept {
+inline bool operator==(const blob_string_t& lhs, string_view_t rhs) noexcept {
     return lhs.value == rhs;
 }
-inline bool operator==(std::string_view lhs, const blob_string_t& rhs) noexcept {
+inline bool operator==(const path_t& lhs, const char* rhs) noexcept {
+    return lhs.value == std::string_view{ rhs };
+}
+inline bool operator==(const number_t& lhs, const char* rhs) noexcept {
+    return lhs.value == std::string_view{ rhs };
+}
+inline bool operator==(const blob_string_t& lhs, const char* rhs) noexcept {
+    return lhs.value == std::string_view{ rhs };
+}
+inline bool operator==(const path_t& lhs, const string_t& rhs) noexcept {
+    return lhs.value.data() == rhs;
+}
+inline bool operator==(const number_t& lhs, const string_t& rhs) noexcept {
+    return lhs.value.data() == rhs;
+}
+inline bool operator==(const blob_string_t& lhs, const string_t& rhs) noexcept {
+    return lhs.value.data() == rhs;
+}
+inline bool operator==(string_view_t lhs, const path_t& rhs) noexcept {
     return lhs == rhs.value;
+}
+inline bool operator==(string_view_t lhs, const number_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(string_view_t lhs, const blob_string_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(string_view_t lhs, const string_t& rhs) noexcept {
+    return lhs.data() == rhs;
+}
+inline bool operator==(const char* lhs, const path_t& rhs) noexcept {
+    return std::string_view{ lhs } == rhs.value;
+}
+inline bool operator==(const char* lhs, const number_t& rhs) noexcept {
+    return std::string_view{ lhs } == rhs.value;
+}
+inline bool operator==(const char* lhs, const blob_string_t& rhs) noexcept {
+    return std::string_view{ lhs } == rhs.value;
+}
+inline bool operator==(const string_t& lhs, const path_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(const string_t& lhs, const number_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(const string_t& lhs, const blob_string_t& rhs) noexcept {
+    return lhs == rhs.value;
+}
+inline bool operator==(const string_t& lhs, string_view_t rhs) noexcept {
+    return lhs == rhs.data();
 }
 
-inline bool operator!=(const path_t& lhs, std::string_view rhs) noexcept {
+
+inline bool operator!=(const path_t& lhs, string_view_t rhs) noexcept {
     return lhs.value != rhs;
 }
-inline bool operator!=(std::string_view lhs, const path_t& rhs) noexcept {
-    return lhs != rhs.value;
-}
-inline bool operator!=(const number_t& lhs, std::string_view rhs) noexcept {
+inline bool operator!=(const number_t& lhs, string_view_t rhs) noexcept {
     return lhs.value != rhs;
 }
-inline bool operator!=(std::string_view lhs, const number_t& rhs) noexcept {
-    return lhs != rhs.value;
-}
-inline bool operator!=(const blob_string_t& lhs, std::string_view rhs) noexcept {
+inline bool operator!=(const blob_string_t& lhs, string_view_t rhs) noexcept {
     return lhs.value != rhs;
 }
-inline bool operator!=(std::string_view lhs, const blob_string_t& rhs) noexcept {
+inline bool operator!=(const path_t& lhs, const char* rhs) noexcept {
+    return lhs.value != std::string_view{ rhs };
+}
+inline bool operator!=(const number_t& lhs, const char* rhs) noexcept {
+    return lhs.value != std::string_view{ rhs };
+}
+inline bool operator!=(const blob_string_t& lhs, const char* rhs) noexcept {
+    return lhs.value != std::string_view{ rhs };
+}
+inline bool operator!=(const path_t& rhs, const string_t& lhs) noexcept {
+    return rhs.value.data() != lhs;
+}
+inline bool operator!=(const number_t& lhs, const string_t& rhs) noexcept {
+    return lhs.value.data() != rhs;
+}
+inline bool operator!=(const blob_string_t& lhs, const string_t& rhs) noexcept {
+    return lhs.value.data() != rhs;
+}
+inline bool operator!=(string_view_t lhs, const path_t& rhs) noexcept {
     return lhs != rhs.value;
+}
+inline bool operator!=(string_view_t lhs, const number_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(string_view_t lhs, const blob_string_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(string_view_t lhs, const string_t& rhs) noexcept {
+    return lhs.data() != rhs;
+}
+inline bool operator!=(const char* lhs, const path_t& rhs) noexcept {
+    return std::string_view{ lhs } != rhs.value;
+}
+inline bool operator!=(const char* lhs, const number_t& rhs) noexcept {
+    return std::string_view{ lhs } != rhs.value;
+}
+inline bool operator!=(const char* lhs, const blob_string_t& rhs) noexcept {
+    return std::string_view{ lhs } != rhs.value;
+}
+inline bool operator!=(const string_t& lhs, const path_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(const string_t& lhs, const number_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(const string_t& lhs, const blob_string_t& rhs) noexcept {
+    return lhs != rhs.value;
+}
+inline bool operator!=(const string_t& lhs, string_view_t rhs) noexcept {
+    return lhs != rhs.data();
 }
 #endif // C++20
 

@@ -24,7 +24,7 @@
 #include <cstring>
 
 namespace ch5 {
-cppon printer_state::state::to_cppon() const {
+inline cppon printer_state::state::to_cppon() const {
 	cppon Options;
 	auto& buffer = Options["buffer"];
 	auto& layout = Options["layout"];
@@ -79,7 +79,7 @@ inline auto apply_options(const cppon& Options) {
 	// - retain:     retain the buffer after printing
 	// - noreserve:  do not reserve memory for printing the JSON representation
 	// - reserve:    reserve memory for printing the JSON representation
-	auto visit_buffer = [&](const value_t& Buffer) {
+	auto visit_buffer = [&](const cppon& Buffer) {
 		std::visit([&](auto&& Opt) {
 			using type = std::decay_t<decltype(Opt)>;
 			if constexpr (std::is_same_v<type, nullptr_t>)
@@ -114,7 +114,7 @@ inline auto apply_options(const cppon& Options) {
 	// - false:          do not compact any object
 	// - true:           compact all objects (print without indentation, space or newline)
 	// - ["label", ...]: compact objects with the specified labels, [] to reset list
-	auto visit_compact = [&](const value_t& Compact) {
+	auto visit_compact = [&](const cppon& Compact) {
 		std::visit([&](auto&& Opt) {
 			using type = std::decay_t<decltype(Opt)>;
 			if constexpr (std::is_same_v<type, nullptr_t>)
@@ -137,7 +137,7 @@ inline auto apply_options(const cppon& Options) {
 	// "pretty" : false | true
 	// - false: uses default layout for pretty printing
 	// - true:  uses alternative layout for pretty printing
-	auto visit_pretty = [&](const value_t& Compact) {
+	auto visit_pretty = [&](const cppon& Compact) {
 		std::visit([&](auto&& Opt) {
 			using type = std::decay_t<decltype(Opt)>;
 			if constexpr (std::is_same_v<type, nullptr_t>)
@@ -149,7 +149,7 @@ inline auto apply_options(const cppon& Options) {
 
 	// "margin" : value
 	// - value: set the margin to the specified value
-	auto visit_margin = [&](const value_t& MarginVal) {
+	auto visit_margin = [&](const cppon& MarginVal) {
 		std::visit([&](auto&& Opt) {
 			using type = std::decay_t<decltype(Opt)>;
 			if constexpr (std::is_same_v<type, nullptr_t>)
@@ -162,7 +162,7 @@ inline auto apply_options(const cppon& Options) {
 	// "tabulation" : value | [value, ...]
 	// - value:        set the tabulation to the specified value
 	// - [value, ...]: set the tabulations to the specified values
-	auto visit_tabulation = [&](const value_t& TabulationVal) {
+	auto visit_tabulation = [&](const cppon& TabulationVal) {
 		std::visit([&](auto&& Opt) {
 			using type = std::decay_t<decltype(Opt)>;
 			if constexpr (std::is_same_v<type, nullptr_t>)
@@ -182,7 +182,7 @@ inline auto apply_options(const cppon& Options) {
 	// --- cppon:   print the CPPON representation of the object
 	// --- pretty:  uses alternative layout for pretty printing
 	// --- compact: compact all or specified objects
-	auto visit_layout = [&](const value_t& Layout) {
+	auto visit_layout = [&](const cppon& Layout) {
 		std::visit([&](auto&& Opt) {
 			using type = std::decay_t<decltype(Opt)>;
 			if constexpr (std::is_same_v<type, nullptr_t>)
@@ -599,6 +599,11 @@ inline cppon configure_printer(string_view_t OptionsJson, bool get_previous = fa
 	return configure_printer(eval(OptionsJson), get_previous);
 }
 
+inline cppon configure_printer(const char* OptionsJson, bool get_previous = false) {
+	if (!OptionsJson) throw bad_option_error{ "empty options" }; // null pointer
+	return configure_printer(string_view_t{ OptionsJson }, get_previous);
+}
+
 /**
  * @brief Formats and prints floating-point numbers with appropriate precision.
  *
@@ -970,30 +975,57 @@ inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, const 
 	// return the printed JSON representation
 	return std::string_view{ State.Out };
 	}
-inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, string_view_t Options = {}) {
+
+inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, string_view_t Options) {
 	cppon Opt; if (!Options.empty()) Opt = eval(Options);
 	return to_string_view(Object, Refs, Opt);
+	}
+inline auto to_string_view(const cppon& Object, reference_vector_t* Refs, const char* Options) {
+	return to_string_view(Object, Refs, string_view_t{ Options });
+	}
+inline auto to_string_view(const cppon& Object, reference_vector_t* Refs) {
+	return to_string_view(Object, Refs, cppon{});
 	}
 inline auto to_string_view(const cppon& Object, const cppon& Options) {
 	return to_string_view(Object, nullptr, Options);
 	}
-inline auto to_string_view(const cppon& Object, string_view_t Options = {}) {
+inline auto to_string_view(const cppon& Object, string_view_t Options) {
 	cppon Opt; if (!Options.empty()) Opt = eval(Options);
 	return to_string_view(Object, nullptr, Opt);
 	}
-inline auto to_string(const cppon& Object, reference_vector_t* Refs, const cppon& Options) -> std::string {
+inline auto to_string_view(const cppon& Object, const char* Options) {
+	return to_string_view(Object, nullptr, string_view_t{ Options });
+	}
+inline auto to_string_view(const cppon& Object) {
+	return to_string_view(Object, nullptr, cppon{});
+}
+
+
+inline auto to_string(const cppon& Object, reference_vector_t* Refs, const cppon& Options) {
 	return  std::string{ to_string_view(Object, Refs, Options) };
 }
-inline auto to_string(const cppon& Object, reference_vector_t* Refs, string_view_t Options = {}) {
+inline auto to_string(const cppon& Object, reference_vector_t* Refs, string_view_t Options) {
 	cppon Opt; if (!Options.empty()) Opt = eval(Options);
 	return std::string{ to_string_view(Object, Refs, Opt) };
+	}
+inline auto to_string(const cppon& Object, reference_vector_t* Refs, const char* Options) {
+	return to_string(Object, Refs, string_view_t{ Options });
+	}
+inline auto to_string(const cppon& Object, reference_vector_t* Refs) {
+	return std::string{ to_string_view(Object, Refs, cppon{}) };
 	}
 inline auto to_string(const cppon& Object, const cppon& Options) {
 	return std::string{ to_string_view(Object, nullptr, Options) };
 	}
-inline auto to_string(const cppon& Object, string_view_t Options = {}) {
+inline auto to_string(const cppon& Object, string_view_t Options) {
 	cppon Opt; if (!Options.empty()) Opt = eval(Options);
 	return std::string{ to_string_view(Object, nullptr, Opt) };
+	}
+inline auto to_string(const cppon& Object, const char* Options) {
+	return to_string(Object, nullptr, string_view_t{ Options });
+	}
+inline auto to_string(const cppon& Object) {
+	return std::string{ to_string_view(Object, nullptr, cppon{}) };
 	}
 
 }//namespace ch5

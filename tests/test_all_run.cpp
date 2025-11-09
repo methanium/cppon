@@ -161,7 +161,7 @@ int main() {
         auto v = eval(R"({"a":1,"s":"x"})", options::quick);
         EXPECT_TRUE(std::holds_alternative<object_t>(v));
         EXPECT_EQ(get_cast<int>(v["/a"]), 1);
-        EXPECT_EQ(std::get<string_view_t>(v["/s"]), "x");
+        EXPECT_STREQ(std::get<string_view_t>(v["/s"]), "x");
         }, true);
 
     run("parse array", [] {
@@ -454,6 +454,102 @@ int main() {
         clear_thread_simd_override();
         EXPECT_EQ(effective_simd_level(), old_level);
         }, true);
+
+
+#if __cplusplus > 201703L
+    std::cout << "\n=== Test C++20 string literal comparisons ===\n\n";
+
+    run("C++20: path_t with string literals", [] {
+        path_t p("/test/path");
+
+        // Comparaisons avec const char*
+        EXPECT_TRUE(p == "/test/path");
+        EXPECT_TRUE("/test/path" == p);
+        EXPECT_FALSE(p == "/other");
+        EXPECT_FALSE("/other" == p);
+
+        // Comparaisons avec string_view
+        EXPECT_TRUE(p == std::string_view("/test/path"));
+        EXPECT_TRUE(std::string_view("/test/path") == p);
+
+        // Opérateurs !=
+        EXPECT_TRUE(p != "/other");
+        EXPECT_TRUE("/other" != p);
+        }, true);
+
+    run("C++20: number_t with string literals", [] {
+        number_t n("42", NumberType::json_int64);
+
+        // Comparaisons avec const char*
+        EXPECT_TRUE(n == "42");
+        EXPECT_TRUE("42" == n);
+        EXPECT_FALSE(n == "43");
+
+        // Comparaisons avec string_view
+        EXPECT_TRUE(n == std::string_view("42"));
+        EXPECT_TRUE(std::string_view("42") == n);
+
+        // Opérateurs !=
+        EXPECT_TRUE(n != "43");
+        EXPECT_TRUE("43" != n);
+        }, true);
+
+    run("C++20: blob_string_t with string literals", [] {
+        blob_string_t b("SGVsbG8=");
+
+        // Comparaisons avec const char*
+        EXPECT_TRUE(b == "SGVsbG8=");
+        EXPECT_TRUE("SGVsbG8=" == b);
+        EXPECT_FALSE(b == "other");
+
+        // Comparaisons avec string_view
+        EXPECT_TRUE(b == std::string_view("SGVsbG8="));
+        EXPECT_TRUE(std::string_view("SGVsbG8=") == b);
+
+        // Opérateurs !=
+        EXPECT_TRUE(b != "other");
+        EXPECT_TRUE("other" != b);
+        }, true);
+
+    run("C++20: cppon variant construction", [] {
+        // Test des constructeurs implicites
+        cppon obj1{ nullptr };
+        EXPECT_TRUE(obj1.is_null());
+
+        cppon obj2{ array_t{} };
+        EXPECT_TRUE(std::holds_alternative<array_t>(obj2));
+
+        cppon obj3{ object_t{} };
+        EXPECT_TRUE(std::holds_alternative<object_t>(obj3));
+
+        cppon obj4{ 42 };
+        EXPECT_EQ(get_cast<int>(obj4), 42);
+
+        cppon obj5{ "test" };
+        EXPECT_STREQ(std::get<string_view_t>(obj5), "test");
+        }, true);
+
+    run("C++20: cppon comparisons with literals in conditions", [] {
+        auto doc = eval(R"({"path":"$cppon-path:/data","num":"123"})", options::quick);
+
+        // Utilisation dans des conditions if
+        auto& path_node = doc["/path"];
+        if (std::holds_alternative<path_t>(path_node)) {
+            auto& p = std::get<path_t>(path_node);
+            EXPECT_TRUE(p == "$cppon-path:/data");
+        }
+
+        auto& num_node = doc["/num"];
+        if (std::holds_alternative<number_t>(num_node)) {
+            auto& n = std::get<number_t>(num_node);
+            EXPECT_TRUE(n == "123");
+        }
+        }, true);
+
+    std::cout << "\n=== C++20 compatibility tests completed ===\n\n";
+#else
+    std::cout << "\n=== C++20 tests skipped (compiled with C++17) ===\n\n";
+#endif
 
     return test_succeeded();
 }
